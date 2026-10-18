@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync --extra dev --locked
+      - name: Unit tests
+        run: uv run pytest
+      - name: Python syntax
+        run: uv run python -m compileall -q src tests scripts/provision-control-key.py
+      - name: Shell syntax
+        run: bash -n scripts/*.sh
+      - name: Compose validation
+        run: docker compose --env-file .env.example config --quiet

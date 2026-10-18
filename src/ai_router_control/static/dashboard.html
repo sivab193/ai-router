@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ai-router control plane</title>
+  <style>
+    @font-face {
+      font-family: "Space Grotesk";
+      src: url("/install/fonts/SpaceGrotesk-Variable.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 300 700;
+      font-display: swap;
+    }
+
+    :root {
+      --ground: #0b0e11;
+      --surface: #11161a;
+      --surface-raised: #171d22;
+      --seam: #2b343b;
+      --seam-strong: #46515a;
+      --ink: #eef3f5;
+      --muted: #9aa8b2;
+      --faint: #74838d;
+      --online: #53d49b;
+      --warning: #f2bc62;
+      --danger: #ff746d;
+      --signal: #61bee4;
+      --focus: #a6ddf5;
+      --radius: 12px;
+      --sans: "Space Grotesk", "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--ground); color: var(--ink); }
+    body { margin: 0; min-width: 300px; font: 15px/1.5 var(--sans); }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    ::selection { color: var(--ground); background: var(--signal); }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+    * { scrollbar-color: var(--seam-strong) var(--ground); scrollbar-width: thin; }
+
+    .topbar {
+      min-height: 72px;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 1px solid var(--seam);
+      background: #0e1215;
+    }
+
+    .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    .brand strong { font-size: 18px; letter-spacing: -0.02em; }
+    .brand span { color: var(--faint); font-family: var(--mono); font-size: 12px; }
+    .session-actions { display: flex; gap: 10px; align-items: center; }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--seam-strong);
+      border-radius: 8px;
+      background: transparent;
+      padding: 9px 13px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 120ms ease-out, border-color 120ms ease-out;
+    }
+    .button:hover { background: var(--surface-raised); border-color: var(--muted); }
+    .button.primary { color: #07120e; background: var(--online); border-color: var(--online); font-weight: 700; }
+    .button.primary:hover { background: #75e5b4; }
+    .button.danger { color: var(--danger); border-color: #71403d; }
+    .button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    main { max-width: 1500px; margin: 0 auto; padding: 36px 32px 64px; }
+    .auth-gate { max-width: 660px; margin: 14vh auto 0; }
+    .auth-gate h1 { margin: 0 0 16px; font-size: clamp(34px, 6vw, 68px); line-height: 0.98; letter-spacing: -0.04em; }
+    .auth-gate p { max-width: 58ch; color: var(--muted); font-size: 17px; }
+    .auth-form { display: flex; gap: 10px; margin-top: 30px; }
+
+    label { display: block; color: var(--muted); font-size: 13px; }
+    input {
+      width: 100%;
+      min-width: 0;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--seam-strong);
+      border-radius: 8px;
+      padding: 10px 12px;
+      caret-color: var(--signal);
+    }
+    input::placeholder { color: #788893; }
+
+    .workspace[hidden], .auth-gate[hidden] { display: none; }
+    .overview {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      padding-bottom: 26px;
+      border-bottom: 1px solid var(--seam);
+    }
+    .overview h1 { max-width: 18ch; margin: 0; font-size: clamp(30px, 4vw, 52px); line-height: 1.02; letter-spacing: -0.035em; }
+    .overview p { margin: 12px 0 0; color: var(--muted); max-width: 64ch; }
+    .fleet-state { display: flex; gap: 20px; align-items: baseline; font-variant-numeric: tabular-nums; }
+    .fleet-state strong { font-size: 30px; }
+    .fleet-state span { color: var(--muted); }
+    .overview-actions { display: grid; justify-items: end; gap: 14px; }
+    .mobile-connect { display: none; }
+
+    .workplane { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(300px, 0.9fr); }
+    .fleet {
+      position: relative;
+      padding-top: 30px;
+      padding-right: 34px;
+      padding-bottom: 20px;
+      padding-left: 24px;
+      border-right: 1px solid var(--seam);
+    }
+    .fleet::before { content: ""; position: absolute; left: 4px; top: 32px; bottom: 28px; width: 1px; background: var(--seam-strong); }
+    .fleet.pulse::after {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: 32px;
+      width: 5px;
+      height: 28px;
+      border-radius: 3px;
+      background: var(--signal);
+      animation: scan 650ms cubic-bezier(.16, 1, .3, 1) both;
+    }
+    @keyframes scan { from { transform: translateY(0); opacity: 1; } to { transform: translateY(260px); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .fleet.pulse::after { animation: none; display: none; } }
+
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .section-head h2 { margin: 0; font-size: 16px; letter-spacing: 0.01em; }
+    .section-head span { color: var(--faint); font: 12px var(--mono); }
+
+    .runner-list { border-top: 1px solid var(--seam-strong); }
+    .runner {
+      position: relative;
+      padding: 22px 0 24px 20px;
+      border-bottom: 1px solid var(--seam);
+    }
+    .runner::before { content: ""; position: absolute; left: -24px; top: 31px; width: 28px; height: 1px; background: var(--seam-strong); }
+    .runner-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+    .identity { min-width: 0; }
+    .identity h3 { margin: 0; font-size: 20px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+    .alias { margin-top: 3px; color: var(--signal); font: 12px/1.4 var(--mono); overflow-wrap: anywhere; }
+    .status { display: inline-flex; align-items: center; gap: 8px; flex: none; font-size: 13px; text-transform: capitalize; }
+    .lamp { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+    .status-online .lamp { background: var(--online); }
+    .status-connecting .lamp { background: var(--warning); }
+    .status-revoked .lamp { background: var(--danger); }
+
+    .measurements {
+      margin: 20px 0 0;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px 20px;
+    }
+    .measurements div { min-width: 0; }
+    .measurements dt { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .measurements dd { margin: 4px 0 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .runner-foot { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 20px; }
+    .runner-foot p { margin: 0; color: var(--muted); font-size: 13px; }
+    .gateway-error { color: var(--warning) !important; }
+
+    .enrollment { padding: 30px 0 20px 34px; }
+    .enrollment h2 { margin: 0; font-size: 22px; letter-spacing: -0.025em; }
+    .enrollment > p { color: var(--muted); max-width: 42ch; }
+    .enroll-form { display: grid; gap: 14px; margin-top: 26px; }
+    .field span { display: block; margin-bottom: 6px; }
+    .command-wrap { margin-top: 24px; border-top: 1px solid var(--seam); padding-top: 22px; }
+    .command-wrap[hidden] { display: none; }
+    .command-wrap p { color: var(--muted); font-size: 13px; }
+    .command {
+      display: block;
+      max-height: 230px;
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid var(--seam-strong);
+      border-radius: 8px;
+      background: #090c0e;
+      color: #d7e9f0;
+      font: 12px/1.65 var(--mono);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      user-select: all;
+    }
+    .command-actions { display: flex; gap: 10px; margin-top: 12px; }
+    .notice { min-height: 24px; margin: 14px 0 0; color: var(--muted); font-size: 13px; }
+    .notice.error { color: var(--danger); }
+    .empty { padding: 42px 12px 46px 20px; border-bottom: 1px solid var(--seam); }
+    .empty strong { display: block; font-size: 20px; }
+    .empty p { color: var(--muted); max-width: 54ch; }
+
+    @media (max-width: 900px) {
+      .topbar { padding: 0 20px; }
+      main { padding: 26px 20px 48px; }
+      .overview { grid-template-columns: 1fr; }
+      .overview-actions { justify-items: start; }
+      .fleet-state { justify-content: flex-start; }
+      .workplane { grid-template-columns: 1fr; }
+      .fleet { border-right: 0; padding-right: 0; }
+      .enrollment { border-top: 1px solid var(--seam); padding-left: 24px; }
+      .measurements { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 560px) {
+      .topbar { min-height: 64px; }
+      .brand span { display: none; }
+      .auth-form { flex-direction: column; }
+      .overview h1 { font-size: 34px; }
+      .mobile-connect { display: inline-flex; }
+      .runner-title, .runner-foot { align-items: flex-start; flex-direction: column; }
+      .measurements { grid-template-columns: 1fr 1fr; }
+      .session-actions .button:first-child { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><strong>ai-router</strong><span>control plane / v0.1</span></div>
+    <div class="session-actions">
+      <button class="button" id="refreshButton" type="button" hidden>Refresh</button>
+      <button class="button" id="forgetButton" type="button" hidden>Lock console</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="auth-gate" id="authGate">
+      <h1>Your inference fleet, on one wire.</h1>
+      <p>Enter the control-plane admin token. It stays in this browser tab and is used only to read runner status or create a short-lived enrollment command.</p>
+      <form class="auth-form" id="authForm">
+        <input id="adminToken" type="password" autocomplete="off" spellcheck="false" placeholder="adm-…" aria-label="Admin token" required>
+        <button class="button primary" type="submit">Open console</button>
+      </form>
+      <p class="notice" id="authNotice" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="workspace" id="workspace" hidden>
+      <div class="overview">
+        <div>
+          <h1>Every model that can answer right now.</h1>
+          <p>Availability follows the outbound runner connection. Context and token figures are reported by vLLM; unavailable fields stay visibly unknown.</p>
+        </div>
+        <div class="overview-actions">
+          <div class="fleet-state" aria-live="polite">
+            <strong id="onlineCount">0</strong>
+            <span id="fleetSummary">runners online</span>
+          </div>
+          <a class="button primary mobile-connect" href="#enrollment">Connect machine</a>
+        </div>
+      </div>
+
+      <div class="workplane">
+        <section class="fleet" id="fleet">
+          <div class="section-head"><h2>Runner channels</h2><span id="lastRefresh">waiting for signal</span></div>
+          <div class="runner-list" id="runnerList"></div>
+        </section>
+
+        <aside class="enrollment" id="enrollment">
+          <h2>Connect another machine</h2>
+          <p>Start vLLM on loopback, generate an enrollment command here, and paste it into the GPU machine or notebook. No inbound port is required.</p>
+          <form class="enroll-form" id="enrollForm">
+            <label class="field"><span>Runner name</span><input id="runnerName" value="gpu-runner" maxlength="80" required></label>
+            <label class="field"><span>Token lifetime (minutes)</span><input id="tokenMinutes" type="number" value="15" min="1" max="1440" required></label>
+            <button class="button primary" id="createCommandButton" type="submit">Create install command</button>
+          </form>
+          <div class="command-wrap" id="commandWrap" hidden>
+            <p>This enrollment token is shown once and expires automatically.</p>
+            <code class="command" id="installCommand"></code>
+            <div class="command-actions"><button class="button" id="copyButton" type="button">Copy command</button></div>
+          </div>
+          <p class="notice" id="consoleNotice" role="status" aria-live="polite"></p>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = { token: sessionStorage.getItem("ai-router-admin-token") || "", timer: null };
+    const $ = (id) => document.getElementById(id);
+    const authGate = $("authGate");
+    const workspace = $("workspace");
+    const fleet = $("fleet");
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+      })[character]);
+    }
+
+    function authHeaders(json = false) {
+      const headers = { Authorization: `Bearer ${state.token}` };
+      if (json) headers["Content-Type"] = "application/json";
+      return headers;
+    }
+
+    function formatNumber(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return "unknown";
+      return new Intl.NumberFormat(undefined, { notation: Number(value) >= 10000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
+    }
+
+    function formatAge(timestamp) {
+      if (!timestamp) return "never";
+      const seconds = Math.max(0, Math.round(Date.now() / 1000 - timestamp));
+      if (seconds < 5) return "just now";
+      if (seconds < 60) return `${seconds}s ago`;
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      return `${Math.floor(seconds / 3600)}h ago`;
+    }
+
+    function contextLabel(model) {
+      return model?.max_model_len ? `${formatNumber(model.max_model_len)} tokens` : "not reported";
+    }
+
+    function renderRunner(runner) {
+      const snapshot = runner.snapshot || {};
+      const model = snapshot.models?.[0] || {};
+      const metrics = snapshot.metrics || {};
+      const gpu = snapshot.hardware?.gpus?.[0];
+      const gpuText = gpu ? `${gpu.name} · ${formatNumber(gpu.memory_mib)} MiB` : "not reported";
+      const routeCount = Array.isArray(snapshot.routes) ? snapshot.routes.length : 0;
+      const gatewayState = runner.litellm_model_id
+        ? "route registered"
+        : runner.status === "offline"
+          ? "route removed while offline"
+          : "route pending";
+      const gateway = runner.gateway_sync_error
+        ? `<p class="gateway-error">Gateway sync: ${escapeHtml(runner.gateway_sync_error)}</p>`
+        : `<p>Gateway ${gatewayState} · ${routeCount} API routes observed</p>`;
+      const revoke = runner.status !== "revoked"
+        ? `<button class="button danger revoke" type="button" data-runner-id="${escapeHtml(runner.id)}" data-runner-name="${escapeHtml(runner.name)}">Revoke runner</button>`
+        : "";
+      return `
+        <article class="runner status-${escapeHtml(runner.status)}">
+          <div class="runner-title">
+            <div class="identity"><h3>${escapeHtml(runner.name)}</h3><div class="alias">${escapeHtml(runner.model_alias)}</div></div>
+            <span class="status"><i class="lamp" aria-hidden="true"></i>${escapeHtml(runner.status)}</span>
+          </div>
+          <dl class="measurements">
+            <div><dt>vLLM model</dt><dd>${escapeHtml(model.id || runner.upstream_model)}</dd></div>
+            <div><dt>Context</dt><dd>${escapeHtml(contextLabel(model))}</dd></div>
+            <div><dt>Prompt tokens</dt><dd>${formatNumber(metrics.prompt_tokens_total)}</dd></div>
+            <div><dt>Output tokens</dt><dd>${formatNumber(metrics.generation_tokens_total)}</dd></div>
+            <div><dt>GPU</dt><dd>${escapeHtml(gpuText)}</dd></div>
+            <div><dt>Running / waiting</dt><dd>${formatNumber(metrics.requests_running)} / ${formatNumber(metrics.requests_waiting)}</dd></div>
+            <div><dt>KV cache</dt><dd>${metrics.kv_cache_usage === undefined ? "unknown" : `${formatNumber(metrics.kv_cache_usage * 100)}%`}</dd></div>
+            <div><dt>Last signal</dt><dd>${escapeHtml(formatAge(runner.last_seen_at))}</dd></div>
+          </dl>
+          <div class="runner-foot">${gateway}${revoke}</div>
+        </article>`;
+    }
+
+    function renderRunners(runners) {
+      const online = runners.filter((runner) => runner.status === "online").length;
+      $("onlineCount").textContent = online;
+      $("fleetSummary").textContent = `${online === 1 ? "runner" : "runners"} online · ${runners.length} enrolled`;
+      $("runnerList").innerHTML = runners.length
+        ? runners.map(renderRunner).join("")
+        : `<div class="empty"><strong>No runner has joined yet.</strong><p>Create the install command on the right, then paste it into any machine where vLLM is already healthy.</p></div>`;
+      document.querySelectorAll(".revoke").forEach((button) => button.addEventListener("click", revokeRunner));
+    }
+
+    async function refreshRunners(showErrors = true) {
+      try {
+        const response = await fetch("/control/v1/runners", { headers: authHeaders() });
+        if (response.status === 401) throw new Error("The admin token was not accepted.");
+        if (!response.ok) throw new Error(`Status request failed (${response.status}).`);
+        renderRunners(await response.json());
+        $("lastRefresh").textContent = `signal ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+        fleet.classList.remove("pulse");
+        void fleet.offsetWidth;
+        fleet.classList.add("pulse");
+        showWorkspace();
+      } catch (error) {
+        if (showErrors) {
+          $("authNotice").textContent = error.message;
+          $("authNotice").classList.add("error");
+          showAuth();
+        }
+      }
+    }
+
+    function showWorkspace() {
+      authGate.hidden = true;
+      workspace.hidden = false;
+      $("refreshButton").hidden = false;
+      $("forgetButton").hidden = false;
+      if (!state.timer) state.timer = setInterval(() => refreshRunners(false), 2500);
+    }
+
+    function showAuth() {
+      authGate.hidden = false;
+      workspace.hidden = true;
+      $("refreshButton").hidden = true;
+      $("forgetButton").hidden = true;
+      clearInterval(state.timer);
+      state.timer = null;
+    }
+
+    async function createEnrollment(event) {
+      event.preventDefault();
+      const button = $("createCommandButton");
+      button.disabled = true;
+      $("consoleNotice").textContent = "Issuing a one-time token…";
+      try {
+        const response = await fetch("/control/v1/enrollment-tokens", {
+          method: "POST",
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            name: $("runnerName").value.trim(),
+            expires_in_seconds: Math.round(Number($("tokenMinutes").value) * 60)
+          })
+        });
+        if (!response.ok) throw new Error(`Could not create enrollment token (${response.status}).`);
+        const result = await response.json();
+        $("installCommand").textContent = result.install_command;
+        $("commandWrap").hidden = false;
+        $("consoleNotice").textContent = `Enrollment expires at ${new Date(result.expires_at * 1000).toLocaleTimeString()}.`;
+      } catch (error) {
+        $("consoleNotice").textContent = error.message;
+        $("consoleNotice").classList.add("error");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function revokeRunner(event) {
+      const button = event.currentTarget;
+      if (!confirm(`Revoke ${button.dataset.runnerName}? It must enroll again before it can reconnect.`)) return;
+      button.disabled = true;
+      const response = await fetch(`/control/v1/runners/${encodeURIComponent(button.dataset.runnerId)}/revoke`, {
+        method: "POST", headers: authHeaders()
+      });
+      if (!response.ok) {
+        $("consoleNotice").textContent = `Could not revoke runner (${response.status}).`;
+        $("consoleNotice").classList.add("error");
+      }
+      await refreshRunners(false);
+    }
+
+    $("authForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      state.token = $("adminToken").value.trim();
+      sessionStorage.setItem("ai-router-admin-token", state.token);
+      $("authNotice").textContent = "Checking control-plane access…";
+      $("authNotice").classList.remove("error");
+      await refreshRunners(true);
+    });
+    $("enrollForm").addEventListener("submit", createEnrollment);
+    $("refreshButton").addEventListener("click", () => refreshRunners(true));
+    $("forgetButton").addEventListener("click", () => {
+      sessionStorage.removeItem("ai-router-admin-token");
+      state.token = "";
+      $("adminToken").value = "";
+      showAuth();
+    });
+    $("copyButton").addEventListener("click", async () => {
+      await navigator.clipboard.writeText($("installCommand").textContent);
+      $("consoleNotice").textContent = "Install command copied.";
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && state.token) refreshRunners(false);
+    });
+
+    if (state.token) refreshRunners(true); else showAuth();
+  </script>
+</body>
+</html>

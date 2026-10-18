@@ -1,0 +1,12 @@
+.env
+.git
+.github
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.db
+data
+.impeccable
+tests
+deploy/*.local.yml

@@ -1,0 +1,330 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T22:22:02Z",
+  "title": "Design System: ai-router Control Plane",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Console Ground",
+        "canonical": "#0b0e11",
+        "tonalRamp": ["oklch(15% 0.01 230)", "oklch(25% 0.01 230)", "oklch(35% 0.01 230)", "oklch(45% 0.01 230)", "oklch(58% 0.01 230)", "oklch(70% 0.01 230)", "oklch(83% 0.01 230)", "oklch(95% 0.01 230)"]
+      },
+      "topbar": {
+        "role": "neutral",
+        "displayName": "Topbar Plane",
+        "canonical": "#0e1215",
+        "tonalRamp": ["oklch(15% 0.01 230)", "oklch(25% 0.01 230)", "oklch(35% 0.01 230)", "oklch(45% 0.01 230)", "oklch(58% 0.01 230)", "oklch(70% 0.01 230)", "oklch(83% 0.01 230)", "oklch(95% 0.01 230)"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Control Surface",
+        "canonical": "#11161a",
+        "tonalRamp": ["oklch(15% 0.01 230)", "oklch(25% 0.01 230)", "oklch(35% 0.01 230)", "oklch(45% 0.01 230)", "oklch(58% 0.01 230)", "oklch(70% 0.01 230)", "oklch(83% 0.01 230)", "oklch(95% 0.01 230)"]
+      },
+      "surface-raised": {
+        "role": "neutral",
+        "displayName": "Raised Interaction Plane",
+        "canonical": "#171d22",
+        "tonalRamp": ["oklch(15% 0.01 230)", "oklch(25% 0.01 230)", "oklch(35% 0.01 230)", "oklch(45% 0.01 230)", "oklch(58% 0.01 230)", "oklch(70% 0.01 230)", "oklch(83% 0.01 230)", "oklch(95% 0.01 230)"]
+      },
+      "code-well": {
+        "role": "neutral",
+        "displayName": "Code Well",
+        "canonical": "#090c0e",
+        "tonalRamp": ["oklch(15% 0.01 230)", "oklch(25% 0.01 230)", "oklch(35% 0.01 230)", "oklch(45% 0.01 230)", "oklch(58% 0.01 230)", "oklch(70% 0.01 230)", "oklch(83% 0.01 230)", "oklch(95% 0.01 230)"]
+      },
+      "seam": {
+        "role": "neutral",
+        "displayName": "Structural Seam",
+        "canonical": "#2b343b",
+        "tonalRamp": ["oklch(15% 0.015 230)", "oklch(25% 0.015 230)", "oklch(35% 0.015 230)", "oklch(45% 0.015 230)", "oklch(58% 0.015 230)", "oklch(70% 0.015 230)", "oklch(83% 0.015 230)", "oklch(95% 0.015 230)"]
+      },
+      "seam-strong": {
+        "role": "neutral",
+        "displayName": "Strong Structural Seam",
+        "canonical": "#46515a",
+        "tonalRamp": ["oklch(15% 0.02 230)", "oklch(25% 0.02 230)", "oklch(35% 0.02 230)", "oklch(45% 0.02 230)", "oklch(58% 0.02 230)", "oklch(70% 0.02 230)", "oklch(83% 0.02 230)", "oklch(95% 0.02 230)"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Console Ink",
+        "canonical": "#eef3f5",
+        "tonalRamp": ["oklch(15% 0.01 230)", "oklch(25% 0.01 230)", "oklch(35% 0.01 230)", "oklch(45% 0.01 230)", "oklch(58% 0.01 230)", "oklch(70% 0.01 230)", "oklch(83% 0.01 230)", "oklch(95% 0.01 230)"]
+      },
+      "code-ink": {
+        "role": "neutral",
+        "displayName": "Code Ink",
+        "canonical": "#d7e9f0",
+        "tonalRamp": ["oklch(15% 0.02 225)", "oklch(25% 0.02 225)", "oklch(35% 0.02 225)", "oklch(45% 0.02 225)", "oklch(58% 0.02 225)", "oklch(70% 0.02 225)", "oklch(83% 0.02 225)", "oklch(95% 0.02 225)"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Copy",
+        "canonical": "#9aa8b2",
+        "tonalRamp": ["oklch(15% 0.02 230)", "oklch(25% 0.02 230)", "oklch(35% 0.02 230)", "oklch(45% 0.02 230)", "oklch(58% 0.02 230)", "oklch(70% 0.02 230)", "oklch(83% 0.02 230)", "oklch(95% 0.02 230)"]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint Telemetry",
+        "canonical": "#74838d",
+        "tonalRamp": ["oklch(15% 0.02 230)", "oklch(25% 0.02 230)", "oklch(35% 0.02 230)", "oklch(45% 0.02 230)", "oklch(58% 0.02 230)", "oklch(70% 0.02 230)", "oklch(83% 0.02 230)", "oklch(95% 0.02 230)"]
+      },
+      "placeholder": {
+        "role": "neutral",
+        "displayName": "Placeholder Telemetry",
+        "canonical": "#788893",
+        "tonalRamp": ["oklch(15% 0.02 230)", "oklch(25% 0.02 230)", "oklch(35% 0.02 230)", "oklch(45% 0.02 230)", "oklch(58% 0.02 230)", "oklch(70% 0.02 230)", "oklch(83% 0.02 230)", "oklch(95% 0.02 230)"]
+      },
+      "online": {
+        "role": "primary",
+        "displayName": "Routable Mint",
+        "canonical": "#53d49b",
+        "tonalRamp": ["oklch(15% 0.14 160)", "oklch(25% 0.14 160)", "oklch(35% 0.14 160)", "oklch(45% 0.14 160)", "oklch(58% 0.14 160)", "oklch(70% 0.14 160)", "oklch(83% 0.14 160)", "oklch(95% 0.14 160)"]
+      },
+      "online-hover": {
+        "role": "primary",
+        "displayName": "Routable Mint Hover",
+        "canonical": "#75e5b4",
+        "tonalRamp": ["oklch(15% 0.13 160)", "oklch(25% 0.13 160)", "oklch(35% 0.13 160)", "oklch(45% 0.13 160)", "oklch(58% 0.13 160)", "oklch(70% 0.13 160)", "oklch(83% 0.13 160)", "oklch(95% 0.13 160)"]
+      },
+      "primary-ink": {
+        "role": "neutral",
+        "displayName": "Primary Ink",
+        "canonical": "#07120e",
+        "tonalRamp": ["oklch(15% 0.03 160)", "oklch(25% 0.03 160)", "oklch(35% 0.03 160)", "oklch(45% 0.03 160)", "oklch(58% 0.03 160)", "oklch(70% 0.03 160)", "oklch(83% 0.03 160)", "oklch(95% 0.03 160)"]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Attention Amber",
+        "canonical": "#f2bc62",
+        "tonalRamp": ["oklch(15% 0.14 80)", "oklch(25% 0.14 80)", "oklch(35% 0.14 80)", "oklch(45% 0.14 80)", "oklch(58% 0.14 80)", "oklch(70% 0.14 80)", "oklch(83% 0.14 80)", "oklch(95% 0.14 80)"]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Revocation Coral",
+        "canonical": "#ff746d",
+        "tonalRamp": ["oklch(15% 0.18 25)", "oklch(25% 0.18 25)", "oklch(35% 0.18 25)", "oklch(45% 0.18 25)", "oklch(58% 0.18 25)", "oklch(70% 0.18 25)", "oklch(83% 0.18 25)", "oklch(95% 0.18 25)"]
+      },
+      "danger-seam": {
+        "role": "tertiary",
+        "displayName": "Revocation Seam",
+        "canonical": "#71403d",
+        "tonalRamp": ["oklch(15% 0.08 25)", "oklch(25% 0.08 25)", "oklch(35% 0.08 25)", "oklch(45% 0.08 25)", "oklch(58% 0.08 25)", "oklch(70% 0.08 25)", "oklch(83% 0.08 25)", "oklch(95% 0.08 25)"]
+      },
+      "signal": {
+        "role": "secondary",
+        "displayName": "Relay Cyan",
+        "canonical": "#61bee4",
+        "tonalRamp": ["oklch(15% 0.12 225)", "oklch(25% 0.12 225)", "oklch(35% 0.12 225)", "oklch(45% 0.12 225)", "oklch(58% 0.12 225)", "oklch(70% 0.12 225)", "oklch(83% 0.12 225)", "oklch(95% 0.12 225)"]
+      },
+      "focus": {
+        "role": "secondary",
+        "displayName": "Focus Ice",
+        "canonical": "#a6ddf5",
+        "tonalRamp": ["oklch(15% 0.08 225)", "oklch(25% 0.08 225)", "oklch(35% 0.08 225)", "oklch(45% 0.08 225)", "oklch(58% 0.08 225)", "oklch(70% 0.08 225)", "oklch(83% 0.08 225)", "oklch(95% 0.08 225)"]
+      }
+    },
+    "typographyMeta": {
+      "display-auth": {
+        "displayName": "Authentication Display",
+        "purpose": "The largest statement, shown before the console is unlocked."
+      },
+      "display": {
+        "displayName": "Display",
+        "purpose": "Workspace thesis and authentication statement."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Enrollment and section-level work-surface headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Runner identity and empty-state emphasis."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Explanatory copy and control labels."
+      },
+      "label": {
+        "displayName": "Telemetry Label",
+        "purpose": "Uppercase labels above runner measurements."
+      },
+      "mono-data": {
+        "displayName": "Mono Data",
+        "purpose": "Aliases, timestamps, commands, numeric readings, and observed machine values."
+      },
+      "action": {
+        "displayName": "Primary Action",
+        "purpose": "Bold labels on routable-mint controls."
+      }
+    },
+    "shadows": [
+      {
+        "name": "status-lamp-anchor",
+        "value": "0 3px 10px rgba(0,0,0,.35)",
+        "purpose": "Keeps the 9px runner-state lamp distinct against the backplane; no other component receives elevation."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "120ms ease-out",
+        "purpose": "Background and border-color changes on interactive controls."
+      },
+      {
+        "name": "signal-scan",
+        "value": "650ms cubic-bezier(.16, 1, .3, 1)",
+        "purpose": "One cyan pulse down the fleet signal rail after a successful refresh; removed for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stack-workplane",
+        "value": "900px"
+      },
+      {
+        "name": "compact-console",
+        "value": "560px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The routable-mint action used for opening the console, creating an install command, and connecting a machine.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Create install command</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; color: var(--primary-ink); background: var(--online); border: 1px solid var(--online); border-radius: 8px; padding: 9px 13px; font: 700 15px/1.5 var(--sans); cursor: pointer; transition: background 120ms ease-out, border-color 120ms ease-out; } .ds-btn-primary:hover { background: var(--online-hover); border-color: var(--online); } .ds-btn-primary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; } .ds-btn-primary:active { background: var(--online); }"
+    },
+    {
+      "name": "Utility Button",
+      "kind": "button",
+      "refersTo": "button-utility",
+      "description": "A transparent, seam-bounded action for refresh, locking, and command copying.",
+      "html": "<button class=\"ds-btn-utility\" type=\"button\">Refresh</button>",
+      "css": ".ds-btn-utility { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); background: transparent; border: 1px solid var(--seam-strong); border-radius: 8px; padding: 9px 13px; font: 400 15px/1.5 var(--sans); cursor: pointer; transition: background 120ms ease-out, border-color 120ms ease-out; } .ds-btn-utility:hover { background: var(--surface-raised); border-color: var(--muted); } .ds-btn-utility:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; } .ds-btn-utility:active { background: var(--surface); }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "An isolated outline action for runner revocation, deliberately subordinate to the primary path.",
+      "html": "<button class=\"ds-btn-danger\" type=\"button\">Revoke runner</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; justify-content: center; color: var(--danger); background: transparent; border: 1px solid var(--danger-seam); border-radius: 8px; padding: 9px 13px; font: 400 15px/1.5 var(--sans); cursor: pointer; transition: background 120ms ease-out, border-color 120ms ease-out; } .ds-btn-danger:hover { background: var(--surface-raised); border-color: var(--danger); } .ds-btn-danger:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; } .ds-btn-danger:active { background: var(--surface); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "The dark inset field used for runner names, token lifetime, and administrative access.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Runner name</span><input class=\"ds-field-input\" value=\"gpu-runner\"></label>",
+      "css": ".ds-field { display: block; color: var(--muted); font: 400 13px/1.5 var(--sans); } .ds-field-label { display: block; margin-bottom: 6px; } .ds-field-input { display: block; width: 100%; min-width: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--seam-strong); border-radius: 8px; padding: 10px 12px; font: 400 15px/1.5 var(--sans); caret-color: var(--signal); } .ds-field-input::placeholder { color: var(--placeholder); } .ds-field-input:hover { border-color: var(--muted); } .ds-field-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }"
+    },
+    {
+      "name": "Runner Status",
+      "kind": "chip",
+      "description": "A plain-language state label paired with a small operational lamp instead of a filled badge.",
+      "html": "<span class=\"ds-status ds-status-online\"><i class=\"ds-status-lamp\" aria-hidden=\"true\"></i>Online</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font: 400 13px/1.5 var(--sans); text-transform: capitalize; } .ds-status-lamp { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); box-shadow: 0 3px 10px rgba(0,0,0,.35); } .ds-status-online .ds-status-lamp { background: var(--online); } .ds-status:hover .ds-status-lamp { outline: 1px solid var(--seam-strong); outline-offset: 2px; } .ds-status:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }"
+    },
+    {
+      "name": "Top Navigation",
+      "kind": "nav",
+      "description": "The persistent session boundary with product identity on the left and utility actions on the right.",
+      "html": "<nav class=\"ds-topbar\"><span class=\"ds-brand\"><strong class=\"ds-brand-name\">ai-router</strong><span class=\"ds-brand-meta\">control plane / v0.1</span></span><button class=\"ds-topbar-action\" type=\"button\">Lock console</button></nav>",
+      "css": ".ds-topbar { min-height: 72px; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; color: var(--ink); background: var(--topbar); border-bottom: 1px solid var(--seam); font-family: var(--sans); } .ds-brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; } .ds-brand-name { font-size: 18px; letter-spacing: -0.02em; } .ds-brand-meta { color: var(--faint); font: 12px var(--mono); } .ds-topbar-action { color: var(--ink); background: transparent; border: 1px solid var(--seam-strong); border-radius: 8px; padding: 9px 13px; font: 400 15px/1.5 var(--sans); cursor: pointer; transition: background 120ms ease-out, border-color 120ms ease-out; } .ds-topbar-action:hover { background: var(--surface-raised); border-color: var(--muted); } .ds-topbar-action:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; } .ds-topbar-action:active { background: var(--surface); }"
+    },
+    {
+      "name": "Runner Channel",
+      "kind": "custom",
+      "description": "The signature full-width channel connecting runner identity and measured telemetry to the continuous fleet backplane.",
+      "html": "<article class=\"ds-runner\"><div class=\"ds-runner-head\"><div class=\"ds-runner-identity\"><h3 class=\"ds-runner-name\">compose-smoke</h3><div class=\"ds-runner-alias\">local/compose-smoke</div></div><span class=\"ds-runner-status\"><i class=\"ds-runner-lamp\" aria-hidden=\"true\"></i>Offline</span></div><dl class=\"ds-measurements\"><div class=\"ds-measure\"><dt class=\"ds-measure-label\">VLLM MODEL</dt><dd class=\"ds-measure-value\">test/Qwen-Coder</dd></div><div class=\"ds-measure\"><dt class=\"ds-measure-label\">CONTEXT</dt><dd class=\"ds-measure-value\">65.5K tokens</dd></div><div class=\"ds-measure\"><dt class=\"ds-measure-label\">LAST SIGNAL</dt><dd class=\"ds-measure-value\">3m ago</dd></div></dl><p class=\"ds-runner-foot\">Gateway route removed while offline · 3 API routes observed</p></article>",
+      "css": ".ds-runner { position: relative; padding: 22px 0 24px 20px; color: var(--ink); background: var(--ground); border-top: 1px solid var(--seam-strong); border-bottom: 1px solid var(--seam); font-family: var(--sans); } .ds-runner::before { content: \"\"; position: absolute; left: -24px; top: 31px; width: 28px; height: 1px; background: var(--seam-strong); } .ds-runner-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; } .ds-runner-identity { min-width: 0; } .ds-runner-name { margin: 0; font-size: 20px; line-height: 1.5; letter-spacing: -0.02em; } .ds-runner-alias { margin-top: 3px; color: var(--signal); font: 12px/1.4 var(--mono); } .ds-runner-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; } .ds-runner-lamp { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); box-shadow: 0 3px 10px rgba(0,0,0,.35); } .ds-measurements { margin: 20px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; } .ds-measure-label { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; } .ds-measure-value { margin: 4px 0 0; font: 13px/1.5 var(--mono); font-variant-numeric: tabular-nums; } .ds-runner-foot { margin: 20px 0 0; color: var(--muted); font-size: 13px; } .ds-runner:hover { background: var(--topbar); } .ds-runner:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }"
+    },
+    {
+      "name": "Enrollment Command Well",
+      "kind": "custom",
+      "refersTo": "command-well",
+      "description": "A selectable, wrapped mono-data well for the one-time install command.",
+      "html": "<code class=\"ds-command\">curl -fsSL https://ai.siv19.dev/install | sh -s -- --token enr-…</code>",
+      "css": ".ds-command { display: block; max-height: 230px; overflow: auto; padding: 14px; color: var(--code-ink); background: var(--code-well); border: 1px solid var(--seam-strong); border-radius: 8px; font: 12px/1.65 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; scrollbar-color: var(--seam-strong) var(--ground); scrollbar-width: thin; } .ds-command:hover { border-color: var(--muted); } .ds-command:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; } .ds-command:active { border-color: var(--signal); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Live Backplane",
+    "overview": "The interface behaves like a persistent switching console: a severe but legible graphite field whose structure is exposed through hard seams, labelled channels, and an always-readable data hierarchy. The backplane is continuous rather than subdivided into a decorative card grid, so the operator reads the fleet as one connected system.\n\nOperational truth is the only source of color or motion. Live state, warnings, failures, aliases, focus, and the restrained refresh pulse carry signal; everything else stays neutral. The result is dense enough for infrastructure work but calm enough to leave unknown values visibly unknown. Glass, gradients, ornamental imagery, and decorative effects are outside this visual language.",
+    "keyCharacteristics": [
+      "Continuous dark backplane with hard structural seams.",
+      "Operational color only, assigned by state and action.",
+      "Space Grotesk for interface hierarchy; monospaced type for machine identity and telemetry.",
+      "Full-width runner channels instead of floating cards.",
+      "One restrained signal-rail pulse after a successful refresh.",
+      "Responsive reflow without horizontal scrolling or loss of the primary machine-connect action."
+    ],
+    "rules": [
+      {
+        "name": "The Operational Color Rule",
+        "body": "Color must report live state, interaction, or routing identity; it is never atmospheric decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Fail-Closed Rule",
+        "body": "Offline state returns to neutral and preserves last-seen context; it never borrows the mint reserved for routable compute.",
+        "section": "colors"
+      },
+      {
+        "name": "The Data Voice Rule",
+        "body": "Human explanation uses Space Grotesk; machine identity, observation, and command output use the mono stack.",
+        "section": "typography"
+      },
+      {
+        "name": "The Honest Label Rule",
+        "body": "Unknown and unreported values receive the same typographic dignity as known values; never fade them into invisibility.",
+        "section": "typography"
+      },
+      {
+        "name": "The Backplane Continuity Rule",
+        "body": "Preserve the signal rail, connected channel marks, and full-width rows; do not break fleet state into independent cards.",
+        "section": "layout"
+      },
+      {
+        "name": "The Seam-over-Shadow Rule",
+        "body": "Establish hierarchy with tonal planes and 1px structural seams; never lift an ordinary container into a card.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Hard Plane Rule",
+        "body": "Round controls for touch clarity, not containers for decoration; structural regions keep hard seams and square silhouettes.",
+        "section": "shapes"
+      },
+      {
+        "name": "The In-Place State Rule",
+        "body": "Status lamps and plain-language availability copy change where they are; runner channels do not animate in from nowhere.",
+        "section": "components"
+      },
+      {
+        "name": "The Primary Path Rule",
+        "body": "Keep machine enrollment visible as the main mint action, including the first mobile viewport, without giving routine or destructive actions equal emphasis.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do treat the runner fleet as one connected backplane with a signal rail and full-width channels.",
+      "Do reserve routable mint, attention amber, revocation coral, and relay cyan for their operational meanings.",
+      "Do use the locally bundled Space Grotesk for interface copy and the mono stack for machine-reported data.",
+      "Do preserve explicit `unknown`, `not reported`, and last-seen states.",
+      "Do keep **Connect machine** reachable in the first mobile viewport and keep measurement pairs free of horizontal scrolling.",
+      "Do honor reduced-motion preference by removing the refresh pulse."
+    ],
+    "donts": [
+      "Don't turn fleet channels, metrics, or enrollment into a grid of floating cards.",
+      "Don't add gradients, glass, backdrop blur, decorative imagery, or ambient color.",
+      "Don't use shadows to separate ordinary regions; use graphite plane changes and 1px seams.",
+      "Don't use operational colors as decorative accents or interchange their meanings.",
+      "Don't hide uncertain telemetry, invent capability, or style missing data as though it were unimportant.",
+      "Don't let destructive actions share the filled mint silhouette of the primary path."
+    ]
+  }
+}

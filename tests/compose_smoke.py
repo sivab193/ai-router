@@ -35,7 +35,11 @@ def request_json(
     data: dict | None = None,
 ) -> tuple[int, dict | list]:
     body = json.dumps(data).encode() if data is not None else None
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "User-Agent": "ai-router-smoke/0.1.0",
+    }
     if body is not None:
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(

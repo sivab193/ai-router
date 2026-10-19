@@ -67,8 +67,9 @@ cd ai-router
 ./scripts/start.sh
 ```
 
-Open `http://127.0.0.1:8088`. Enter `AI_ROUTER_ADMIN_TOKEN` from `.env` when the
-console asks. LiteLLM's management UI is intentionally loopback-only at
+Open `http://127.0.0.1:8088` locally or the Cloudflare Access-protected
+`https://admin.ai.siv19.dev` console. Enter `AI_ROUTER_ADMIN_TOKEN` from `.env`
+when the console asks. LiteLLM's management UI is intentionally loopback-only at
 `http://127.0.0.1:4000/ui`; sign in with `LITELLM_MASTER_KEY`.
 
 The startup script creates independent random credentials, starts Postgres,
@@ -155,6 +156,11 @@ Docker administrator, LiteLLM master key, or salt key can have broad impact.
 Use a dedicated patched host, full-disk encryption, protected backups, a secret
 manager, and separate virtual keys with budgets for every client. Read
 [SECURITY.md](SECURITY.md) before a multi-user or business deployment.
+
+The public inference hostname does not expose the console or administrative
+control routes. The separate admin hostname should be protected by a default-deny
+Cloudflare Access application. The application bearer token remains a second
+layer and should still be stored like a password.
 
 ## Development
 

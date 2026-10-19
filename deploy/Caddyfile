@@ -12,13 +12,54 @@
 		X-Frame-Options "DENY"
 	}
 
-	@control path / /healthz /control/* /install/*
-	handle @control {
+	# The administrative hostname is protected by Cloudflare Access. Keep the
+	# application-level bearer token enabled as a second authentication layer.
+	@admin host {$AI_ROUTER_ADMIN_HOST:admin.ai.siv19.dev}
+	handle @admin {
 		reverse_proxy control:8080
 	}
 
-	@inference path /v1/*
-	handle @inference {
+	# Preserve the complete console locally for recovery and maintenance without
+	# making its administrative routes reachable on the public API hostname.
+	@local_control {
+		host localhost 127.0.0.1
+		path / /healthz /control/* /install/*
+	}
+	handle @local_control {
+		reverse_proxy control:8080
+	}
+
+	@local_inference {
+		host localhost 127.0.0.1
+		path /v1/*
+	}
+	handle @local_inference {
+		reverse_proxy litellm:4000
+	}
+
+	# GPU runners must reach only their enrollment and authenticated WebSocket
+	# endpoints. Everything else under /control is deliberately absent here.
+	@api_control {
+		host {$AI_ROUTER_PUBLIC_HOST:ai.siv19.dev}
+		path /healthz /install/* /control/v1/runners/enroll
+	}
+	handle @api_control {
+		reverse_proxy control:8080
+	}
+
+	@api_runner_connect {
+		host {$AI_ROUTER_PUBLIC_HOST:ai.siv19.dev}
+		path_regexp runner_connect ^/control/v1/runners/[^/]+/connect$
+	}
+	handle @api_runner_connect {
+		reverse_proxy control:8080
+	}
+
+	@api_inference {
+		host {$AI_ROUTER_PUBLIC_HOST:ai.siv19.dev}
+		path /v1/*
+	}
+	handle @api_inference {
 		reverse_proxy litellm:4000
 	}
 

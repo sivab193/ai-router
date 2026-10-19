@@ -97,6 +97,9 @@ services:
 
   edge:
     image: caddy:2.10-alpine
+    environment:
+      AI_ROUTER_PUBLIC_HOST: ${AI_ROUTER_PUBLIC_HOST:-ai.siv19.dev}
+      AI_ROUTER_ADMIN_HOST: ${AI_ROUTER_ADMIN_HOST:-admin.ai.siv19.dev}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:

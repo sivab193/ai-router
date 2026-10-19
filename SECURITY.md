@@ -21,10 +21,12 @@ can make stored provider credentials unrecoverable.
 
 ## Security model
 
-The public Caddy edge exposes inference and the ai-router control/runner routes.
-LiteLLM management endpoints are intentionally blocked there and are available
-only on `127.0.0.1:4000`. Applications must use scoped virtual keys, never the
-LiteLLM master key.
+The public inference hostname exposes only inference, health, installation, and
+the two authenticated runner connection routes. The console and administrative
+control routes use a separate, default-deny Cloudflare Access hostname and retain
+the application bearer token as a second layer. LiteLLM management endpoints are
+available only on `127.0.0.1:4000`. Applications must use scoped virtual keys,
+never the LiteLLM master key.
 
 Host root, Docker-admin access, or the LiteLLM master key remains a high-impact
 trust boundary. Use a dedicated patched host, full-disk encryption, protected

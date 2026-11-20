@@ -13,7 +13,21 @@ from pathlib import Path
 
 
 USER_ID = "ai-router-control-plane"
-ALLOWED_ROUTES = ["/model/new", "/model/delete"]
+# Routes the control plane needs: model registration (Phase 1), plus
+# LiteLLM Teams and virtual keys for profiles (Phase 5). Nothing else:
+# the control key stays route-restricted and cannot read other keys'
+# values or touch admin endpoints.
+ALLOWED_ROUTES = [
+    "/model/new",
+    "/model/delete",
+    "/team/new",
+    "/team/update",
+    "/team/delete",
+    "/team/info",
+    "/team/daily/activity",
+    "/key/generate",
+    "/key/list",
+]
 
 
 def load_env(path: Path) -> dict[str, str]:

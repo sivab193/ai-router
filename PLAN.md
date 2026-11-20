@@ -115,6 +115,59 @@ For each request, preserve `provider_cost_usd`, `allocated_gpu_cost_usd`, `prici
 - Add mTLS, key rotation, signed runner release images, SBOM/vulnerability scanning, backups, restore drills, and least-privilege network policies.
 - Evaluate multi-node inference only when a single-node model/throughput limit proves insufficient.
 
+### Phase 5 — profiles (implemented)
+
+- First-class profiles (`personal`, `aayvu`, `splitllm`, `everything-else`),
+  each mapped onto exactly one LiteLLM Team with a monthly budget, GPU
+  budget, model allowlist (glob patterns), and RPM/TPM limits.
+- Per-profile virtual keys minted through the control plane, failing closed
+  on allowlist violations and exhausted budgets; raw keys shown once, stored
+  only as hashes.
+- Spend sync from LiteLLM team daily activity plus allocated GPU cost from
+  hub deployments, kept as two separate ledgers; burn rate and month-end
+  projection on the profile card.
+- Budget alerts (50/80/100% of monthly budget) and a token-anomaly alert
+  (today ≥ 2x the 7-day daily mean), fired once per period and
+  acknowledgable from the console.
+- One-time migration of existing tagged keys: matched by tag/alias,
+  unmatched keys flagged visibly in `everything-else`, never silently to
+  `personal`.
+- Control key routes extended to the LiteLLM team and key endpoints
+  (`scripts/provision-control-key.py` re-provisions on upgrade).
+
+**Exit criterion:** every profile has one LiteLLM team; a key cannot be
+minted outside its profile's allowlist or budget; month spend reconciles
+provider cost and allocated GPU cost separately; unmatched legacy keys are
+visible for review.
+
+### Phase 6 — model hub (implemented; real-GPU validation pending)
+
+- Registry of curated models with immutable versions (a SQLite trigger
+  rejects version updates; a changed weight file is a new version) and a
+  storage index that records where weights live without forcing moves.
+- KitOps/ModelKit packaging via a rendered Kitfile, plus a plain
+  `model.json` manifest fallback for the no-KitOps layout.
+- One-click deploy with GCP first (L4/A100), then RunPod, Vast.ai, Colab,
+  and the home fleet: quote first (hourly cost estimate, fit verdict,
+  profile, budget remaining), confirm, then launch. Fit checks refuse
+  oversized models; unknown VRAM requires an explicit override; cloud
+  targets refuse local-only weights.
+- Auto-registration: when a hub runner enrolls, the deployment links to it
+  and its `local/<model>-<version>` alias joins the owning profile's
+  allowlist.
+- One-click teardown: relay closed, LiteLLM model unregistered, runner
+  revoked, then the VM deleted (auto-provision) or a delete command handed
+  to the operator. Routing never outlives teardown.
+- No provider credentials on deploy targets: the VM sees only a single-use
+  enrollment token (two-hour window, via instance metadata) and the public
+  control-plane URL.
+
+**Exit criterion:** a quote shows cost, fit, profile, and budget remaining;
+a deploy enrolls a runner that serves through `ai.siv19.dev` under the
+quoted alias; teardown leaves no route and no billable instance. The live
+GPU leg of this criterion is still pending — see the Known limits section of
+docs/PROFILES_AND_HUB.md.
+
 ## API and data contract sketch
 
 Keep standard inference endpoints owned by the gateway:

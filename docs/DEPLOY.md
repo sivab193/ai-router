@@ -88,5 +88,13 @@ docker compose up --build -d --wait
 uv run pytest
 ```
 
+After upgrading to a version with new control-plane routes (profiles and
+the model hub added the LiteLLM team/key routes), re-run the control-key
+provisioning script — it detects the route change and re-provisions the key:
+
+```bash
+python3 scripts/provision-control-key.py
+```
+
 Do not use the LiteLLM master key from an application or expose port 4000 beyond
 loopback.

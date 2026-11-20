@@ -27,6 +27,13 @@ Cloudflare account.
   state in a compact operations console.
 - LiteLLM virtual keys, per-client budgets and rate limits, spend tracking,
   provider credentials, routing, retries, and fallbacks.
+- Profiles (`personal`, `aayvu`, `splitllm`, `everything-else`) mapped onto
+  LiteLLM Teams, with per-profile budgets, model allowlists, spend sync,
+  and budget/token alerts.
+- A model hub: a registry of models with immutable versions, KitOps/ModelKit
+  packaging, and one-click deploys to GCP, RunPod, Vast.ai, Colab, and the
+  home fleet — with automatic registration into the router and one-click
+  teardown.
 - A least-privilege internal control key limited to model registration routes.
 - A public edge that blocks LiteLLM management endpoints.
 
@@ -142,6 +149,15 @@ export OPENAI_API_KEY=sk-your-virtual-key
 
 Claude Code, Codex, SDK, and curl examples are in
 [docs/CONNECT_CLIENTS.md](docs/CONNECT_CLIENTS.md).
+
+## Profiles and model hub
+
+Spend is attributable per project through profiles, each mapped onto one
+LiteLLM Team with its own budget, model allowlist, and keys; the console
+shows provider spend and allocated GPU cost as separate ledgers. Models live
+in a hub registry with immutable versions and deploy to a GPU target with a
+quote-first, confirm-then-launch flow. See
+[docs/PROFILES_AND_HUB.md](docs/PROFILES_AND_HUB.md).
 
 ## Security model
 

@@ -199,6 +199,32 @@
     .empty strong { display: block; font-size: 20px; }
     .empty p { color: var(--muted); max-width: 54ch; }
 
+    .lower { margin-top: 44px; border-top: 1px solid var(--seam); padding-top: 30px; }
+    .profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 18px; }
+    .profile-card { border: 1px solid var(--seam); border-radius: var(--radius); background: var(--surface); padding: 20px; }
+    .profile-card h3 { margin: 0; font-size: 18px; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+    .profile-card .desc { color: var(--muted); font-size: 13px; margin: 6px 0 0; min-height: 38px; }
+    .profile-card .spend { margin-top: 14px; font: 13px/1.7 var(--mono); }
+    .profile-card .spend strong { font-size: 22px; font-family: var(--sans); }
+    .alert-chip { display: inline-block; margin: 10px 6px 0 0; padding: 3px 8px; border: 1px solid #71403d; border-radius: 6px; color: var(--danger); font: 12px var(--mono); }
+    .sync-state { color: var(--faint); font: 12px var(--mono); margin-top: 10px; overflow-wrap: anywhere; }
+    .profile-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .hub-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
+    .hub-table th { text-align: left; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--seam-strong); }
+    .hub-table td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--seam); vertical-align: top; }
+    .hub-table .mono { font: 12px var(--mono); overflow-wrap: anywhere; }
+    .deploy-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 18px; }
+    .deploy-form .field { min-width: 180px; flex: 1; }
+    select { width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--seam-strong); border-radius: 8px; padding: 10px 12px; font: inherit; }
+    .quote-box { margin-top: 18px; border: 1px solid var(--seam-strong); border-radius: var(--radius); background: var(--surface); padding: 18px 20px; line-height: 1.8; }
+    .quote-box[hidden] { display: none; }
+    .quote-box .mono { font: 12px var(--mono); }
+    .fit-fits { color: var(--online); }
+    .fit-unknown { color: var(--warning); }
+    .fit-refused { color: var(--danger); }
+    #hubPreview { margin-top: 16px; }
+    #hubPreview[hidden] { display: none; }
+
     @media (max-width: 900px) {
       .topbar { padding: 0 20px; }
       main { padding: 26px 20px 48px; }
@@ -280,6 +306,26 @@
           <p class="notice" id="consoleNotice" role="status" aria-live="polite"></p>
         </aside>
       </div>
+
+      <section class="lower" id="profiles">
+        <div class="section-head"><h2>Profiles</h2><span>one LiteLLM team each · spend splits provider vs GPU</span></div>
+        <div class="profile-grid" id="profileGrid"></div>
+      </section>
+
+      <section class="lower" id="hub">
+        <div class="section-head"><h2>Model hub</h2><span>registry · quote · deploy · teardown</span></div>
+        <form class="deploy-form" id="deployForm">
+          <label class="field"><span>Model</span><select id="deployModel"></select></label>
+          <label class="field"><span>Target</span><select id="deployTarget"></select></label>
+          <label class="field"><span>Profile</span><select id="deployProfile"></select></label>
+          <button class="button primary" type="submit" id="quoteButton">Get quote</button>
+        </form>
+        <div class="quote-box" id="quoteBox" hidden></div>
+        <div id="modelTable"></div>
+        <code class="command" id="hubPreview" hidden></code>
+        <div class="section-head" style="margin-top: 28px"><h2>Deployments</h2><span id="deploymentCount"></span></div>
+        <div id="deploymentList"></div>
+      </section>
     </section>
   </main>
 
@@ -379,6 +425,8 @@
         void fleet.offsetWidth;
         fleet.classList.add("pulse");
         showWorkspace();
+        refreshProfiles();
+        refreshHub();
       } catch (error) {
         if (showErrors) {
           $("authNotice").textContent = error.message;
@@ -386,6 +434,202 @@
           showAuth();
         }
       }
+    }
+
+    // -- Profiles ------------------------------------------------------------
+
+    let lastProfileHtml = "";
+    let lastModelHtml = "";
+    let lastDeploymentHtml = "";
+    let lastModelOptions = "";
+    let lastTargetOptions = "";
+    let lastProfileOptions = "";
+
+    function money(value) {
+      if (value === null || value === undefined) return "uncapped";
+      return `$${Number(value).toFixed(2)}`;
+    }
+
+    function renderProfiles(profiles) {
+      const html = profiles.map((profile) => {
+        const alerts = (profile.unacknowledged_alerts || []).map((alert) =>
+          `<span class="alert-chip" title="${escapeHtml(alert.kind)} · ${escapeHtml(alert.period)}">${escapeHtml(alert.kind)}</span>`).join("");
+        const syncState = profile.team_synced
+          ? `team ${escapeHtml(profile.litellm_team_id || "")}`
+          : "team not synced yet — sync to create it";
+        const projection = profile.projected_month_spend_usd === null || profile.projected_month_spend_usd === undefined
+          ? "projection needs more data"
+          : `projected ${money(profile.projected_month_spend_usd)} by month end`;
+        return `<div class="profile-card">
+          <h3>${escapeHtml(profile.name)}</h3>
+          <p class="desc">${escapeHtml(profile.description || "")}</p>
+          <div class="spend"><strong>${money(profile.month_spend_usd)}</strong> this month<br>
+            provider ${money(profile.month_provider_spend_usd)} · GPU ${money(profile.month_gpu_cost_usd)}<br>
+            budget remaining: ${money(profile.budget_remaining_usd)}<br>${escapeHtml(projection)}</div>
+          <div class="sync-state">${syncState} · ${profile.key_count} key${profile.key_count === 1 ? "" : "s"}</div>
+          <div>${alerts}</div>
+          <div class="profile-actions"><button class="button sync-profile" type="button" data-profile-id="${escapeHtml(profile.id)}">Sync spend</button></div>
+        </div>`;
+      }).join("");
+      if (html !== lastProfileHtml) { $("profileGrid").innerHTML = html; lastProfileHtml = html; }
+      document.querySelectorAll(".sync-profile").forEach((button) => button.addEventListener("click", syncProfile));
+    }
+
+    async function refreshProfiles() {
+      try {
+        const response = await fetch("/control/v1/profiles", { headers: authHeaders() });
+        if (!response.ok) return;
+        renderProfiles(await response.json());
+      } catch { /* keep the last good render */ }
+    }
+
+    async function syncProfile(event) {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const response = await fetch(`/control/v1/profiles/${encodeURIComponent(button.dataset.profileId)}/sync`, {
+        method: "POST", headers: authHeaders()
+      });
+      if (!response.ok) {
+        $("consoleNotice").textContent = `Profile sync failed (${response.status}).`;
+        $("consoleNotice").classList.add("error");
+      }
+      button.disabled = false;
+      await refreshProfiles();
+    }
+
+    // -- Model hub -----------------------------------------------------------
+
+    function renderHub(models, targets, deployments) {
+      const modelOptions = models.map((model) =>
+        `<option value="${escapeHtml(model.id)}">${escapeHtml(model.display_name)}</option>`).join("");
+      if (modelOptions !== lastModelOptions) { $("deployModel").innerHTML = modelOptions; lastModelOptions = modelOptions; }
+      const targetOptions = targets.map((target) =>
+        `<option value="${escapeHtml(target.id)}">${escapeHtml(target.name)} · $${target.hourly_cost_usd.toFixed(2)}/hr</option>`).join("");
+      if (targetOptions !== lastTargetOptions) { $("deployTarget").innerHTML = targetOptions; lastTargetOptions = targetOptions; }
+
+      const modelHtml = `<table class="hub-table"><thead><tr><th>Model</th><th>Latest</th><th>Runtime</th><th>Min VRAM</th><th>Status</th><th></th></tr></thead><tbody>` + models.map((model) => {
+        const version = model.latest_version;
+        const vram = version?.min_vram_mib ? `${Math.round(version.min_vram_mib / 1024)} GB` : "unknown";
+        const links = version ? `
+          <button class="button hub-file" type="button" data-url="/control/v1/hub/models/${encodeURIComponent(model.id)}/versions/${encodeURIComponent(version.version)}/kitfile">Kitfile</button>
+          <button class="button hub-file" type="button" data-url="/control/v1/hub/models/${encodeURIComponent(model.id)}/versions/${encodeURIComponent(version.version)}/manifest">Manifest</button>` : "";
+        return `<tr><td><strong>${escapeHtml(model.display_name)}</strong><br><span class="mono">${escapeHtml(model.id)}</span></td>
+          <td class="mono">${version ? escapeHtml(version.version) : "—"}</td>
+          <td>${version ? escapeHtml(version.runtime) : "—"}</td>
+          <td>${vram}</td><td>${escapeHtml(model.status)}</td><td>${links}</td></tr>`;
+      }).join("") + "</tbody></table>";
+      if (modelHtml !== lastModelHtml) { $("modelTable").innerHTML = modelHtml; lastModelHtml = modelHtml; }
+      document.querySelectorAll(".hub-file").forEach((button) => button.addEventListener("click", previewHubFile));
+
+      $("deploymentCount").textContent = `${deployments.length} total`;
+      const depHtml = deployments.length ? deployments.map((deployment) => `
+        <div class="profile-card" style="margin-top: 12px">
+          <h3>${escapeHtml(deployment.alias)}</h3>
+          <div class="spend">${escapeHtml(deployment.target)} · ${escapeHtml(deployment.profile_id)} · ${escapeHtml(deployment.status)}<br>
+            $${deployment.hourly_cost_usd.toFixed(2)}/hr · created ${escapeHtml(formatAge(deployment.created_at))}</div>
+          ${deployment.status !== "torn_down" && deployment.status !== "failed"
+            ? `<div class="profile-actions"><button class="button danger teardown" type="button" data-deployment-id="${escapeHtml(deployment.id)}" data-alias="${escapeHtml(deployment.alias)}">Teardown</button></div>` : ""}
+        </div>`).join("")
+        : `<div class="empty"><strong>No deployments yet.</strong><p>Pick a model and target above to get a quote.</p></div>`;
+      if (depHtml !== lastDeploymentHtml) { $("deploymentList").innerHTML = depHtml; lastDeploymentHtml = depHtml; }
+      document.querySelectorAll(".teardown").forEach((button) => button.addEventListener("click", teardownDeployment));
+    }
+
+    async function refreshHub() {
+      try {
+        const [modelsRes, targetsRes, deploymentsRes, profilesRes] = await Promise.all([
+          fetch("/control/v1/hub/models", { headers: authHeaders() }),
+          fetch("/control/v1/hub/targets", { headers: authHeaders() }),
+          fetch("/control/v1/hub/deployments", { headers: authHeaders() }),
+          fetch("/control/v1/profiles", { headers: authHeaders() }),
+        ]);
+        if (!modelsRes.ok || !targetsRes.ok || !deploymentsRes.ok) return;
+        if (profilesRes.ok) {
+          const profiles = await profilesRes.json();
+          const profileOptions = profiles.map((profile) =>
+            `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join("");
+          if (profileOptions !== lastProfileOptions) { $("deployProfile").innerHTML = profileOptions; lastProfileOptions = profileOptions; }
+        }
+        renderHub(await modelsRes.json(), await targetsRes.json(), await deploymentsRes.json());
+      } catch { /* keep the last good render */ }
+    }
+
+    async function previewHubFile(event) {
+      const preview = $("hubPreview");
+      preview.hidden = false;
+      preview.textContent = "Loading…";
+      const response = await fetch(event.currentTarget.dataset.url, { headers: authHeaders() });
+      if (!response.ok) { preview.textContent = `Could not load (${response.status}).`; return; }
+      const text = await response.text();
+      const contentType = response.headers.get("content-type") || "";
+      preview.textContent = contentType.includes("json") ? JSON.stringify(JSON.parse(text), null, 2) : text;
+    }
+
+    async function requestQuote(event) {
+      event.preventDefault();
+      const box = $("quoteBox");
+      box.hidden = false;
+      box.innerHTML = "Getting a quote…";
+      const response = await fetch("/control/v1/hub/deployments/quote", {
+        method: "POST",
+        headers: authHeaders(true),
+        body: JSON.stringify({
+          model_id: $("deployModel").value,
+          target: $("deployTarget").value,
+          profile_id: $("deployProfile").value,
+        }),
+      });
+      if (!response.ok) { box.innerHTML = `Quote failed (${response.status}).`; return; }
+      const quote = await response.json();
+      const override = quote.fit === "unknown"
+        ? `<label style="display:block;margin-top:10px"><input type="checkbox" id="unknownOverride" style="width:auto"> I know this model fits this GPU</label>` : "";
+      const deployButton = quote.fit === "refused" ? ""
+        : `<button class="button primary" id="deployButton" type="button" style="margin-top:12px">Deploy — $${quote.hourly_cost_usd.toFixed(2)}/hr</button>`;
+      box.innerHTML = `
+        <div><strong>${escapeHtml(quote.model_display_name)}</strong> on ${escapeHtml(quote.target_label)} (${escapeHtml(quote.gpu)})</div>
+        <div>Alias: <span class="mono">${escapeHtml(quote.alias)}</span></div>
+        <div class="fit-${escapeHtml(quote.fit)}">Fit: ${escapeHtml(quote.fit)} — ${escapeHtml(quote.fit_reason)}</div>
+        <div>Hourly cost: $${quote.hourly_cost_usd.toFixed(2)} (${escapeHtml(quote.pricing_source)}) · profile ${escapeHtml(quote.profile_id)} · budget remaining ${money(quote.budget_remaining_usd)}</div>
+        ${override}${deployButton}
+        <div id="deployResult" style="margin-top:12px"></div>`;
+      const deployBtn = $("deployButton");
+      if (deployBtn) deployBtn.addEventListener("click", () => createDeployment(quote.id));
+    }
+
+    async function createDeployment(quoteId) {
+      const result = $("deployResult");
+      result.textContent = "Deploying…";
+      const allowUnknown = document.getElementById("unknownOverride")?.checked || false;
+      const response = await fetch("/control/v1/hub/deployments", {
+        method: "POST",
+        headers: authHeaders(true),
+        body: JSON.stringify({ quote_id: quoteId, confirm: true, allow_unknown_fit: allowUnknown }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        result.textContent = `Deploy failed (${response.status}): ${detail.detail || ""}`;
+        return;
+      }
+      const deployment = await response.json();
+      const command = deployment.provision_command || deployment.install_command || "";
+      result.innerHTML = `<p>${escapeHtml(deployment.next_step || "")}</p>`
+        + (command ? `<code class="command">${escapeHtml(command)}</code>` : "")
+        + (deployment.startup_script ? `<p>Startup script — save it before running the command:</p><code class="command">${escapeHtml(deployment.startup_script)}</code>` : "");
+      await refreshHub();
+    }
+
+    async function teardownDeployment(event) {
+      const button = event.currentTarget;
+      if (!confirm(`Tear down ${button.dataset.alias}? Routing is removed immediately and the runner is revoked.`)) return;
+      button.disabled = true;
+      const response = await fetch(`/control/v1/hub/deployments/${encodeURIComponent(button.dataset.deploymentId)}/teardown`, {
+        method: "POST", headers: authHeaders()
+      });
+      if (!response.ok) {
+        $("consoleNotice").textContent = `Teardown failed (${response.status}).`;
+        $("consoleNotice").classList.add("error");
+      }
+      await refreshHub();
     }
 
     function showWorkspace() {
@@ -455,6 +699,7 @@
       await refreshRunners(true);
     });
     $("enrollForm").addEventListener("submit", createEnrollment);
+    $("deployForm").addEventListener("submit", requestQuote);
     $("refreshButton").addEventListener("click", () => refreshRunners(true));
     $("forgetButton").addEventListener("click", () => {
       sessionStorage.removeItem("ai-router-admin-token");

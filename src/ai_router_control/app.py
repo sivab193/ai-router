@@ -144,14 +144,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body: RunnerEnroll, authorization: Annotated[str | None, Header()] = None
     ) -> dict[str, Any]:
         enrollment_token = bearer_token(authorization)
-        if not enrollment_token or not store.consume_enrollment(enrollment_token):
-            raise HTTPException(status_code=401, detail="invalid, expired, or already-used enrollment token")
         models = body.snapshot.get("models")
         if not isinstance(models, list) or not models or not isinstance(models[0], dict):
             raise HTTPException(status_code=422, detail="vLLM discovery returned no models")
         upstream_model = str(models[0].get("id") or "").strip()
         if not upstream_model:
             raise HTTPException(status_code=422, detail="vLLM model is missing an id")
+        if not enrollment_token:
+            raise HTTPException(status_code=401, detail="invalid, expired, or already-used enrollment token")
+        enrollment = store.get_enrollment(enrollment_token)
+        if enrollment is None:
+            raise HTTPException(status_code=401, detail="invalid, expired, or already-used enrollment token")
+        if body.name != enrollment["name"]:
+            raise HTTPException(status_code=403, detail="enrollment token is bound to another runner name")
+        enrollment = store.consume_enrollment_details(enrollment_token)
+        if enrollment is None:
+            raise HTTPException(status_code=401, detail="invalid, expired, or already-used enrollment token")
         runner_id = f"run_{uuid.uuid4().hex[:20]}"
         runner_token = issue_token("airun")
         alias = body.model_alias or f"local/{slug(body.name)}"

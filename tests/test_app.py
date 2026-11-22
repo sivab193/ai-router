@@ -90,6 +90,25 @@ def test_admin_auth_and_single_use_enrollment(tmp_path):
     assert reused.status_code == 401
 
 
+def test_enrollment_token_is_bound_to_runner_name(tmp_path):
+    client = make_client(tmp_path)
+    issued = enrollment(client)
+    response = client.post(
+        "/control/v1/runners/enroll",
+        headers={"Authorization": f"Bearer {issued['token']}"},
+        json={"name": "different-runner", "snapshot": snapshot()},
+    )
+    assert response.status_code == 403
+
+    # An identity mismatch does not burn the token.
+    reused = client.post(
+        "/control/v1/runners/enroll",
+        headers={"Authorization": f"Bearer {issued['token']}"},
+        json={"name": "gpu-one", "snapshot": snapshot()},
+    )
+    assert reused.status_code == 200
+
+
 def test_runner_connection_updates_availability(tmp_path):
     client = make_client(tmp_path)
     issued = enrollment(client)

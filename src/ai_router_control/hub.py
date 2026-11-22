@@ -12,6 +12,7 @@ It performs no I/O except through the caller's subprocess/HTTP clients.
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import dataclass, field
 
 
@@ -125,6 +126,11 @@ TARGETS: dict[str, DeployTarget] = {
 # Targets that live outside his network and therefore cannot reach local
 # weights. A cloud deploy needs a Hugging Face source or a ModelKit ref.
 CLOUD_TARGETS = ("gcp-l4", "gcp-a100-40", "gcp-a100-80", "runpod-4090", "vast-4090", "colab-t4")
+
+
+def shell_double_quote(value: str) -> str:
+    """Quote a value for insertion into a generated POSIX shell script."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
 
 
 def validate_model_id(value: str) -> str:
@@ -272,14 +278,19 @@ def render_gcp_startup_script(
     The script carries no provider credentials — only the public control
     plane URL and the short-lived enrollment token.
     """
-    max_len_args = f" --max-model-len {max_model_len}" if max_model_len else ""
+    max_len_args = f" --max-model-len {shlex.quote(str(max_model_len))}" if max_model_len else ""
+    public_url_arg = shell_double_quote(public_url)
+    runner_name_arg = shell_double_quote(runner_name)
+    model_source_arg = shell_double_quote(model_source)
+    served_name_arg = shell_double_quote(served_name)
+    vllm_image_arg = shell_double_quote(vllm_image)
     return f"""#!/bin/bash
 # ai-router hub deploy: vLLM + runner enrollment. Generated, do not edit by hand.
 set -euo pipefail
 METADATA="http://metadata.google.internal/computeMetadata/v1/instance/attributes"
 TOKEN="$(curl -fsS -H 'Metadata-Flavor: Google' "$METADATA/ai-router-enrollment-token")"
-PUBLIC_URL="{public_url}"
-MODEL="{model_source}"
+PUBLIC_URL={public_url_arg}
+MODEL={model_source_arg}
 MODEL_DIR="{model_dir}"
 
 export DEBIAN_FRONTEND=noninteractive
@@ -288,20 +299,20 @@ apt-get install -y -qq python3 python3-pip curl > /dev/null
 python3 -m pip install -q --break-system-packages huggingface_hub
 
 mkdir -p "$MODEL_DIR"
-python3 -m huggingface_hub.commands.huggingface_cli download "$MODEL" --local-dir "$MODEL_DIR" --local-dir-use-symlinks False
+hf download "$MODEL" --local-dir "$MODEL_DIR"
 
 docker run -d --restart unless-stopped --gpus all --network host \\
   -v "$MODEL_DIR:/model:ro" \\
-  {vllm_image} \\
+  {vllm_image_arg} \\
   --model /model --host 127.0.0.1 --port 8000 \\
-  --served-model-name "{served_name}"{max_len_args}
+  --served-model-name {served_name_arg}{max_len_args}
 
 for attempt in $(seq 1 60); do
   curl -fsS http://127.0.0.1:8000/health > /dev/null 2>&1 && break
   sleep 10
 done
 
-curl -fsSL "$PUBLIC_URL/install/runner.sh" | bash -s -- --token "$TOKEN" --name "{runner_name}"
+curl -fsSL "$PUBLIC_URL/install/runner.sh" | bash -s -- --token "$TOKEN" --name {runner_name_arg}
 """
 
 
@@ -369,7 +380,7 @@ def gpu_cost_for_day(
     for deployment in deployments:
         if deployment["profile_id"] != profile_id:
             continue
-        if deployment["status"] in ("quoted", "failed"):
+        if deployment["status"] in ("quoted", "awaiting_launch", "failed"):
             continue
         start = max(float(deployment["created_at"]), day_start_ts)
         end = deployment.get("torn_down_at")

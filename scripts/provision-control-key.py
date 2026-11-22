@@ -141,7 +141,7 @@ def main() -> None:
             },
         )
 
-    print("Provisioned LiteLLM control key with /model/new and /model/delete only.")
+    print(f"Provisioned LiteLLM control key with {len(ALLOWED_ROUTES)} route restrictions.")
 
 
 if __name__ == "__main__":

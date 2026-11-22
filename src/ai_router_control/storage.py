@@ -257,20 +257,37 @@ class Store:
             )
 
     def consume_enrollment(self, raw_token: str) -> bool:
+        return self.consume_enrollment_details(raw_token) is not None
+
+    def get_enrollment(self, raw_token: str) -> dict[str, Any] | None:
+        """Return an unconsumed, unexpired enrollment token record."""
+        digest = token_hash(raw_token)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT token_hash, name, created_at, expires_at, used_at FROM enrollment_tokens "
+                "WHERE token_hash = ?",
+                (digest,),
+            ).fetchone()
+        if row is None or row["used_at"] is not None or row["expires_at"] <= time.time():
+            return None
+        return dict(row)
+
+    def consume_enrollment_details(self, raw_token: str) -> dict[str, Any] | None:
+        """Consume a token once and return the identity it was issued for."""
         digest = token_hash(raw_token)
         now = time.time()
         with self._lock, self._connect() as connection:
             row = connection.execute(
-                "SELECT token_hash, expires_at, used_at FROM enrollment_tokens WHERE token_hash = ?",
+                "SELECT token_hash, name, created_at, expires_at, used_at FROM enrollment_tokens WHERE token_hash = ?",
                 (digest,),
             ).fetchone()
             if row is None or row["used_at"] is not None or row["expires_at"] <= now:
-                return False
+                return None
             updated = connection.execute(
                 "UPDATE enrollment_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL",
                 (now, digest),
             )
-            return updated.rowcount == 1
+            return dict(row) if updated.rowcount == 1 else None
 
     def create_runner(
         self,

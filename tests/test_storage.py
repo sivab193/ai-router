@@ -36,3 +36,21 @@ def test_runner_secrets_are_hashed_and_status_changes(tmp_path):
     store.mark_offline("run_1")
     assert store.authenticate_proxy("run_1", "aiprx_secret") is False
     assert store.get_runner("run_1")["status"] == "offline"
+
+
+def test_profile_provider_and_service_policy_round_trip(tmp_path):
+    store = Store(tmp_path / "control.db")
+    updated = store.update_profile(
+        "aayvu",
+        {
+            "allowed_providers": ["bedrock", "google_cloud"],
+            "allowed_services": ["bedrock/claude", "google/document-ai"],
+        },
+    )
+    assert updated is not None
+    assert updated["allowed_providers"] == ["bedrock", "google_cloud"]
+    assert updated["allowed_services"] == ["bedrock/claude", "google/document-ai"]
+
+    store.add_profile_key("sk-org", "aayvu", "organization")
+    assert store.authenticate_profile_key("sk-org")["profile_id"] == "aayvu"
+    assert store.authenticate_profile_key("wrong") is None

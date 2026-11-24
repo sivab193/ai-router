@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
-ALIAS_PATTERN = re.compile(r"^local/[a-z0-9][a-z0-9._/-]{0,126}$")
+ALIAS_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}/[a-z0-9][a-z0-9._/-]{0,236}$")
 
 
 class EnrollmentTokenCreate(BaseModel):
@@ -23,7 +23,7 @@ class RunnerEnroll(BaseModel):
     @classmethod
     def validate_alias(cls, value: str | None) -> str | None:
         if value is not None and not ALIAS_PATTERN.fullmatch(value):
-            raise ValueError("model_alias must match local/<lowercase-name>")
+            raise ValueError("model_alias must match provider/<lowercase-service-name>")
         return value
 
 
@@ -59,6 +59,8 @@ class ProfileCreate(BaseModel):
     tpm_limit: int | None = Field(default=None, ge=1)
     monthly_token_ceiling: int | None = Field(default=None, ge=1)
     allowed_models: list[str] = Field(default_factory=list)
+    allowed_providers: list[str] = Field(default_factory=list)
+    allowed_services: list[str] = Field(default_factory=list)
 
 
 class ProfileUpdate(BaseModel):
@@ -70,12 +72,30 @@ class ProfileUpdate(BaseModel):
     tpm_limit: int | None = Field(default=None, ge=1)
     monthly_token_ceiling: int | None = Field(default=None, ge=1)
     allowed_models: list[str] | None = None
+    allowed_providers: list[str] | None = None
+    allowed_services: list[str] | None = None
 
 
 class ProfileKeyCreate(BaseModel):
     key_alias: str = Field(min_length=1, max_length=80)
     models: list[str] | None = None
     max_budget: float | None = Field(default=None, ge=0)
+
+
+class ServiceUpsert(BaseModel):
+    id: str = Field(min_length=1, max_length=300, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    display_name: str = Field(min_length=1, max_length=160)
+    provider: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9._-]*$")
+    kind: str = Field(
+        pattern=r"^(language_model|vision_model|embedding_model|reranker|ocr|document_intelligence)$"
+    )
+    capabilities: list[str] = Field(default_factory=list)
+    endpoints: list[str] = Field(default_factory=list)
+    context_window: int | None = Field(default=None, ge=1)
+    input_cost_per_million: float | None = Field(default=None, ge=0)
+    output_cost_per_million: float | None = Field(default=None, ge=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
 
 
 class MigrationKey(BaseModel):

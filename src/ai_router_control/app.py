@@ -41,6 +41,7 @@ from .profiles import (
     budget_alert_kinds,
     burn_rate,
     disallowed_models,
+    model_allowed,
     migrate_key_tags,
     token_anomaly,
     validate_profile_id,
@@ -59,6 +60,7 @@ from .schemas import (
     RunnerEnroll,
     RunnerHeartbeat,
     RunnerView,
+    ServiceUpsert,
 )
 from .security import bearer_token, issue_token, token_hash
 from .storage import Store
@@ -77,7 +79,7 @@ HOP_BY_HOP = {
     "content-length",
     "authorization",
 }
-RUNNER_PATH = re.compile(r"^(chat/completions|completions|responses|embeddings|models(?:/.*)?|tokenize|detokenize)$")
+RUNNER_PATH = re.compile(r"^(chat/completions|completions|responses|embeddings|documents/process|models(?:/.*)?|tokenize|detokenize)$")
 PACKAGE_DIR = Path(__file__).resolve().parent
 QUOTE_TTL_SECONDS = 900
 HUB_ENROLLMENT_TTL_SECONDS = 7200
@@ -114,6 +116,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         token = bearer_token(authorization)
         if token is None or not hmac.compare_digest(token, configured.admin_token):
             raise HTTPException(status_code=401, detail="valid admin bearer token required")
+
+    def profile_for_key(authorization: str | None) -> dict[str, Any]:
+        token = bearer_token(authorization)
+        key = store.authenticate_profile_key(token) if token else None
+        if key is None:
+            raise HTTPException(status_code=401, detail="valid profile bearer token required")
+        profile = store.get_profile(key["profile_id"])
+        if profile is None:
+            raise HTTPException(status_code=401, detail="profile for bearer token no longer exists")
+        return profile
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -195,6 +207,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             runner_token=runner_token,
             snapshot=body.snapshot,
         )
+        primary_model = body.snapshot["models"][0]
+        service_kind = str(body.snapshot.get("service_kind") or "language_model")
+        if service_kind not in {
+            "language_model",
+            "vision_model",
+            "embedding_model",
+            "reranker",
+            "ocr",
+            "document_intelligence",
+        }:
+            service_kind = "language_model"
+        store.upsert_service(
+            {
+                "id": alias,
+                "display_name": str(body.snapshot.get("display_name") or alias),
+                "provider": str(body.snapshot.get("provider") or alias.split("/", 1)[0]),
+                "kind": service_kind,
+                "capabilities": runner_capabilities(body.snapshot),
+                "endpoints": [str(path) for path in body.snapshot.get("routes", []) if path],
+                "context_window": primary_model.get("max_model_len"),
+                "metadata": {"runner_id": runner_id, "runtime": body.snapshot.get("runtime")},
+            }
+        )
         if body.name.startswith("hub-"):
             await link_hub_deployment(store, gateway, body.name[4:], runner_id, alias)
         websocket_url = configured.public_url.replace("https://", "wss://").replace("http://", "ws://")
@@ -241,6 +276,122 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "revoked"}
 
     # -- Profiles (Phase 5) -------------------------------------------------
+
+    @app.get("/v1/catalog")
+    async def public_catalog(
+        authorization: Annotated[str | None, Header()] = None,
+        kind: str | None = None,
+        provider: str | None = None,
+    ) -> dict[str, Any]:
+        """Return only services permitted for the caller's organization profile."""
+        profile = profile_for_key(authorization)
+        permitted = [
+            service
+            for service in store.list_services()
+            if profile_allows_service(profile, service)
+        ]
+        services = []
+        for service in permitted:
+            if kind and service["kind"] != kind:
+                continue
+            if provider and service["provider"] != provider:
+                continue
+            services.append(public_service(service))
+        return {
+            "object": "catalog",
+            "profile_id": profile["id"],
+            "providers": sorted({item["provider"] for item in permitted}),
+            "data": services,
+        }
+
+    @app.post("/v1/documents/process")
+    async def process_document(
+        request: Request,
+        service: str,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> Response:
+        """Relay a document request to an allowed outbound service runner."""
+        profile = profile_for_key(authorization)
+        catalog_service = store.get_service(service)
+        if catalog_service is None or not catalog_service["enabled"]:
+            raise HTTPException(status_code=404, detail="document service not found")
+        if catalog_service["kind"] not in {"ocr", "document_intelligence", "vision_model"}:
+            raise HTTPException(status_code=422, detail="service cannot process documents")
+        if not profile_allows_service(profile, catalog_service):
+            raise HTTPException(status_code=403, detail="document service is not allowed for this profile")
+        runner = next(
+            (
+                item
+                for item in store.list_runners()
+                if item["model_alias"] == service and item["revoked_at"] is None
+            ),
+            None,
+        )
+        if runner is None:
+            raise HTTPException(status_code=503, detail="document service runner is unavailable")
+        forwarded_headers = {
+            key: value
+            for key, value in request.headers.items()
+            if key.lower() not in HOP_BY_HOP
+        }
+        try:
+            relay_request = await relay.begin(
+                runner["id"],
+                method="POST",
+                path="/v1/documents/process",
+                query=request.url.query,
+                headers=forwarded_headers,
+                body=await request.body(),
+                start_timeout=configured.request_start_timeout_seconds,
+            )
+        except RunnerUnavailable as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except (RunnerResponseError, TimeoutError, asyncio.TimeoutError) as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+        response_headers = {
+            key: value
+            for key, value in relay_request.start.get("headers", {}).items()
+            if key.lower() not in HOP_BY_HOP
+        }
+        return StreamingResponse(
+            relay_request.chunks(configured.request_idle_timeout_seconds),
+            status_code=int(relay_request.start.get("status", 502)),
+            headers=response_headers,
+            media_type=response_headers.get("content-type"),
+        )
+
+    @app.get("/control/v1/services", dependencies=[Depends(require_admin)])
+    async def list_services() -> list[dict[str, Any]]:
+        return store.list_services(include_disabled=True)
+
+    @app.post("/control/v1/services/sync", dependencies=[Depends(require_admin)])
+    async def sync_services() -> dict[str, Any]:
+        """Import configured LiteLLM model aliases into the capability catalog."""
+        if not gateway.enabled:
+            raise HTTPException(status_code=503, detail="LiteLLM gateway is not configured")
+        try:
+            models = await gateway.list_models()
+        except GatewayError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+        imported = []
+        for model in models:
+            service = service_from_gateway_model(model)
+            if service is None:
+                continue
+            imported.append(store.upsert_service(service))
+        return {"count": len(imported), "services": [public_service(item) for item in imported]}
+
+    @app.put("/control/v1/services/{service_id:path}", dependencies=[Depends(require_admin)])
+    async def put_service(service_id: str, body: ServiceUpsert) -> dict[str, Any]:
+        if body.id != service_id:
+            raise HTTPException(status_code=400, detail="service id does not match the URL")
+        return store.upsert_service(body.model_dump())
+
+    @app.delete("/control/v1/services/{service_id:path}", dependencies=[Depends(require_admin)])
+    async def delete_service(service_id: str) -> dict[str, bool]:
+        if not store.delete_service(service_id):
+            raise HTTPException(status_code=404, detail="service not found")
+        return {"deleted": True}
 
     def profile_summary(profile: dict[str, Any]) -> dict[str, Any]:
         now = datetime.now(UTC)
@@ -331,6 +482,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=422,
                 detail=f"models outside the profile allowlist: {', '.join(disallowed)}",
+            )
+        allowed_providers = set(profile.get("allowed_providers") or [])
+        provider_violations = []
+        for model in models:
+            service = store.get_service(model)
+            if service and allowed_providers and service["provider"] not in allowed_providers:
+                provider_violations.append(model)
+        if provider_violations:
+            raise HTTPException(
+                status_code=422,
+                detail=f"models outside the profile provider policy: {', '.join(provider_violations)}",
             )
         budget = profile.get("monthly_budget_usd")
         if budget is not None:
@@ -1073,6 +1235,83 @@ def public_profile_key(key: dict[str, Any]) -> dict[str, Any]:
         "created_at": key["created_at"],
         "revoked_at": key.get("revoked_at"),
         "status": "revoked" if key.get("revoked_at") is not None else "active",
+    }
+
+
+def runner_capabilities(snapshot: dict[str, Any]) -> list[str]:
+    routes = {str(item).removeprefix("/v1/") for item in snapshot.get("routes", [])}
+    capabilities = {"text"}
+    if "chat/completions" in routes:
+        capabilities.add("chat")
+    if "responses" in routes:
+        capabilities.add("responses")
+    if "embeddings" in routes:
+        capabilities.add("embeddings")
+    if snapshot.get("input_modalities") and "image" in snapshot["input_modalities"]:
+        capabilities.add("vision")
+    capabilities.update(str(item) for item in snapshot.get("capabilities", []) if item)
+    return sorted(capabilities)
+
+
+def profile_allows_service(profile: dict[str, Any], service: dict[str, Any]) -> bool:
+    providers = set(profile.get("allowed_providers") or [])
+    if providers and service["provider"] not in providers:
+        return False
+    patterns = list(profile.get("allowed_services") or []) or list(
+        profile.get("allowed_models") or []
+    )
+    return not patterns or model_allowed(patterns, service["id"])
+
+
+def public_service(service: dict[str, Any]) -> dict[str, Any]:
+    """Remove internal runner/adapter metadata from the application catalog."""
+    fields = {
+        "id",
+        "display_name",
+        "provider",
+        "kind",
+        "capabilities",
+        "endpoints",
+        "context_window",
+        "input_cost_per_million",
+        "output_cost_per_million",
+        "enabled",
+        "created_at",
+        "updated_at",
+    }
+    return {key: value for key, value in service.items() if key in fields}
+
+
+def service_from_gateway_model(model: dict[str, Any]) -> dict[str, Any] | None:
+    model_id = str(model.get("id") or model.get("model_name") or "").strip()
+    if not model_id:
+        return None
+    info = model.get("model_info") if isinstance(model.get("model_info"), dict) else {}
+    provider = str(
+        model.get("owned_by")
+        or info.get("provider")
+        or model_id.split("/", 1)[0]
+        or "unknown"
+    ).lower().replace(" ", "_")
+    capabilities = {"text", "chat"}
+    input_modalities = info.get("input_modalities") or model.get("input_modalities") or []
+    if "image" in input_modalities:
+        capabilities.add("vision")
+    if info.get("supports_function_calling"):
+        capabilities.add("tools")
+    if info.get("supports_response_schema"):
+        capabilities.add("structured_output")
+    return {
+        "id": model_id,
+        "display_name": str(info.get("display_name") or model_id),
+        "provider": provider,
+        "kind": "vision_model" if "vision" in capabilities else "language_model",
+        "capabilities": sorted(capabilities),
+        "endpoints": ["/v1/chat/completions", "/v1/responses"],
+        "context_window": info.get("max_input_tokens") or info.get("max_tokens"),
+        "input_cost_per_million": info.get("input_cost_per_million"),
+        "output_cost_per_million": info.get("output_cost_per_million"),
+        "metadata": {"source": "litellm"},
     }
 
 

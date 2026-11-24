@@ -64,6 +64,8 @@ class Store:
                     tpm_limit INTEGER,
                     monthly_token_ceiling INTEGER,
                     allowed_models_json TEXT NOT NULL DEFAULT '[]',
+                    allowed_providers_json TEXT NOT NULL DEFAULT '[]',
+                    allowed_services_json TEXT NOT NULL DEFAULT '[]',
                     litellm_team_id TEXT,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
@@ -77,6 +79,22 @@ class Store:
                     migration_note TEXT,
                     created_at REAL NOT NULL,
                     revoked_at REAL
+                );
+
+                CREATE TABLE IF NOT EXISTS services (
+                    id TEXT PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    capabilities_json TEXT NOT NULL DEFAULT '[]',
+                    endpoints_json TEXT NOT NULL DEFAULT '[]',
+                    context_window INTEGER,
+                    input_cost_per_million REAL,
+                    output_cost_per_million REAL,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS profile_usage_daily (
@@ -179,6 +197,17 @@ class Store:
             }
             if "revoked_at" not in columns:
                 connection.execute("ALTER TABLE profile_keys ADD COLUMN revoked_at REAL")
+            profile_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(profiles)")
+            }
+            if "allowed_providers_json" not in profile_columns:
+                connection.execute(
+                    "ALTER TABLE profiles ADD COLUMN allowed_providers_json TEXT NOT NULL DEFAULT '[]'"
+                )
+            if "allowed_services_json" not in profile_columns:
+                connection.execute(
+                    "ALTER TABLE profiles ADD COLUMN allowed_services_json TEXT NOT NULL DEFAULT '[]'"
+                )
         self._seed_profiles()
         self._seed_hub_models()
 
@@ -190,8 +219,9 @@ class Store:
                     """
                     INSERT OR IGNORE INTO profiles(
                         id, name, description, monthly_budget_usd, gpu_budget_usd,
-                        rpm_limit, tpm_limit, allowed_models_json, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        rpm_limit, tpm_limit, allowed_models_json,
+                        allowed_providers_json, allowed_services_json, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         profile.id,
@@ -202,6 +232,8 @@ class Store:
                         profile.rpm_limit,
                         profile.tpm_limit,
                         json.dumps(list(profile.allowed_models)),
+                        "[]",
+                        "[]",
                         now,
                         now,
                     ),
@@ -418,8 +450,9 @@ class Store:
                 INSERT INTO profiles(
                     id, name, description, monthly_budget_usd, gpu_budget_usd,
                     rpm_limit, tpm_limit, monthly_token_ceiling,
-                    allowed_models_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    allowed_models_json, allowed_providers_json,
+                    allowed_services_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     profile["id"],
@@ -431,6 +464,8 @@ class Store:
                     profile.get("tpm_limit"),
                     profile.get("monthly_token_ceiling"),
                     json.dumps(profile.get("allowed_models", [])),
+                    json.dumps(profile.get("allowed_providers", [])),
+                    json.dumps(profile.get("allowed_services", [])),
                     now,
                     now,
                 ),
@@ -447,14 +482,16 @@ class Store:
             "tpm_limit",
             "monthly_token_ceiling",
             "allowed_models",
+            "allowed_providers",
+            "allowed_services",
         }
         assignments = []
         values: list[Any] = []
         for key, value in fields.items():
             if key not in allowed:
                 continue
-            if key == "allowed_models":
-                assignments.append("allowed_models_json = ?")
+            if key in {"allowed_models", "allowed_providers", "allowed_services"}:
+                assignments.append(f"{key}_json = ?")
                 values.append(json.dumps(value))
             else:
                 assignments.append(f"{key} = ?")
@@ -534,6 +571,79 @@ class Store:
                 "SELECT * FROM profile_keys WHERE key_hash = ?", (key_hash,)
             ).fetchone()
         return dict(row) if row else None
+
+    def authenticate_profile_key(self, raw_key: str) -> dict[str, Any] | None:
+        key = self.get_profile_key_by_hash(token_hash(raw_key))
+        if key is None or key.get("revoked_at") is not None:
+            return None
+        return key
+
+    # -- Service catalog ---------------------------------------------------
+
+    def upsert_service(self, service: dict[str, Any]) -> dict[str, Any]:
+        now = time.time()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO services(
+                    id, display_name, provider, kind, capabilities_json,
+                    endpoints_json, context_window, input_cost_per_million,
+                    output_cost_per_million, metadata_json, enabled,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    provider = excluded.provider,
+                    kind = excluded.kind,
+                    capabilities_json = excluded.capabilities_json,
+                    endpoints_json = excluded.endpoints_json,
+                    context_window = excluded.context_window,
+                    input_cost_per_million = excluded.input_cost_per_million,
+                    output_cost_per_million = excluded.output_cost_per_million,
+                    metadata_json = excluded.metadata_json,
+                    enabled = excluded.enabled,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    service["id"],
+                    service["display_name"],
+                    service["provider"],
+                    service["kind"],
+                    json.dumps(service.get("capabilities", [])),
+                    json.dumps(service.get("endpoints", [])),
+                    service.get("context_window"),
+                    service.get("input_cost_per_million"),
+                    service.get("output_cost_per_million"),
+                    json.dumps(service.get("metadata", {})),
+                    1 if service.get("enabled", True) else 0,
+                    now,
+                    now,
+                ),
+            )
+        result = self.get_service(service["id"])
+        assert result is not None
+        return result
+
+    def get_service(self, service_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM services WHERE id = ?", (service_id,)
+            ).fetchone()
+        return self._decode_service(row) if row else None
+
+    def list_services(self, *, include_disabled: bool = False) -> list[dict[str, Any]]:
+        query = "SELECT * FROM services"
+        if not include_disabled:
+            query += " WHERE enabled = 1"
+        query += " ORDER BY provider, display_name, id"
+        with self._connect() as connection:
+            rows = connection.execute(query).fetchall()
+        return [self._decode_service(row) for row in rows]
+
+    def delete_service(self, service_id: str) -> bool:
+        with self._connect() as connection:
+            result = connection.execute("DELETE FROM services WHERE id = ?", (service_id,))
+        return result.rowcount == 1
 
     def list_profile_keys(self, profile_id: str) -> list[dict[str, Any]]:
         with self._connect() as connection:
@@ -860,6 +970,17 @@ class Store:
     def _decode_profile(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
         result["allowed_models"] = json.loads(result.pop("allowed_models_json"))
+        result["allowed_providers"] = json.loads(result.pop("allowed_providers_json"))
+        result["allowed_services"] = json.loads(result.pop("allowed_services_json"))
+        return result
+
+    @staticmethod
+    def _decode_service(row: sqlite3.Row) -> dict[str, Any]:
+        result = dict(row)
+        result["capabilities"] = json.loads(result.pop("capabilities_json"))
+        result["endpoints"] = json.loads(result.pop("endpoints_json"))
+        result["metadata"] = json.loads(result.pop("metadata_json"))
+        result["enabled"] = bool(result["enabled"])
         return result
 
     @staticmethod

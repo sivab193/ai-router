@@ -2,6 +2,37 @@
 
 All clients need a LiteLLM virtual key and a model alias. Create the key in LiteLLM's Admin UI with only the models, rate limits, and budget that client should receive.
 
+## Discover permitted providers and services
+
+`GET /v1/catalog` is the application-facing discovery contract. It accepts the
+same profile key as inference and returns only providers and services allowed by
+that profile. Catalog entries may represent language or vision models,
+embeddings, rerankers, OCR engines, or document-intelligence services.
+
+```bash
+curl https://ai.siv19.dev/v1/catalog \
+  -H "Authorization: Bearer $AI_ROUTER_API_KEY"
+```
+
+Applications should store the returned service `id` as the stable alias. They
+must not infer access from a provider name or expose the control-plane admin
+token. An organization with `allowed_providers: ["bedrock"]`, for example,
+cannot discover Google services even if those services exist globally.
+
+Document adapters and custom OCR runtimes use the same outbound-runner trust
+model as vLLM. A compatible runner advertises an `ocr`,
+`document_intelligence`, or `vision_model` service and serves
+`/v1/documents/process` on loopback. Applications submit the chosen catalog
+alias as the `service` query parameter:
+
+```bash
+curl -X POST \
+  "https://ai.siv19.dev/v1/documents/process?service=google/document-ai" \
+  -H "Authorization: Bearer $AI_ROUTER_API_KEY" \
+  -H "Content-Type: application/pdf" \
+  --data-binary @document.pdf
+```
+
 ## OpenAI SDKs and applications
 
 ```bash

@@ -83,7 +83,7 @@
     .auth-form { display: flex; gap: 10px; margin-top: 30px; }
 
     label { display: block; color: var(--muted); font-size: 13px; }
-    input {
+    input, textarea {
       width: 100%;
       min-width: 0;
       color: var(--ink);
@@ -92,8 +92,10 @@
       border-radius: 8px;
       padding: 10px 12px;
       caret-color: var(--signal);
+      font: inherit;
     }
-    input::placeholder { color: #788893; }
+    textarea { resize: vertical; }
+    input::placeholder, textarea::placeholder { color: #788893; }
 
     .workspace[hidden], .auth-gate[hidden] { display: none; }
     .overview {
@@ -321,7 +323,7 @@
       </div>
 
       <section class="lower" id="profiles">
-        <div class="section-head"><h2>Profiles</h2><span>provider and GPU ledgers · automatic sync every 15 minutes</span></div>
+        <div class="section-head"><h2>Profiles</h2><span>provider and GPU ledgers · automatic sync every 15 minutes</span><button class="button" type="button" id="syncCatalogButton">Sync provider catalog</button></div>
         <div class="profile-grid" id="profileGrid"></div>
       </section>
 
@@ -349,6 +351,13 @@
       <label class="field"><span>Monthly total budget (USD)</span><input id="profileMonthlyBudget" type="number" min="0" step="0.01"></label>
       <label class="field"><span>Monthly GPU budget (USD)</span><input id="profileGpuBudget" type="number" min="0" step="0.01"></label>
       <div class="dialog-actions"><button class="button" type="submit">Save budgets</button></div>
+    </form>
+    <form class="dialog-form" id="profilePolicyForm" aria-labelledby="profilePolicyTitle">
+      <h2 id="profilePolicyTitle">Organization access policy</h2>
+      <label class="field"><span>Allowed providers (comma separated)</span><input id="profileAllowedProviders" autocomplete="off" spellcheck="false" placeholder="bedrock, google_cloud"></label>
+      <label class="field"><span>Allowed services (comma separated)</span><textarea id="profileAllowedServices" rows="3" spellcheck="false" placeholder="bedrock/claude, google/document-ai"></textarea></label>
+      <label class="field"><span>Allowed inference models (comma separated)</span><textarea id="profileAllowedModels" rows="3" spellcheck="false" placeholder="bedrock/claude, local/qwen"></textarea></label>
+      <div class="dialog-actions"><button class="button" type="submit">Save access policy</button></div>
     </form>
     <form class="dialog-form" id="profileKeyForm">
       <label class="field"><span>New key alias</span><input id="profileKeyAlias" maxlength="80" required autocomplete="off"></label>
@@ -538,6 +547,9 @@
       $("profileDialogCopy").textContent = `${profile.id} · ${profile.key_count} active key${profile.key_count === 1 ? "" : "s"}`;
       $("profileMonthlyBudget").value = profile.monthly_budget_usd ?? "";
       $("profileGpuBudget").value = profile.gpu_budget_usd ?? "";
+      $("profileAllowedProviders").value = (profile.allowed_providers || []).join(", ");
+      $("profileAllowedServices").value = (profile.allowed_services || []).join(", ");
+      $("profileAllowedModels").value = (profile.allowed_models || []).join(", ");
       renderProfileKeys(profile.keys || []);
     }
 
@@ -558,6 +570,23 @@
         })
       });
       $("profileDialogNotice").textContent = response.ok ? "Budgets saved." : `Could not save budgets (${response.status}).`;
+      if (response.ok) { await loadActiveProfile(); await refreshProfiles(); }
+    }
+
+    function commaList(id) {
+      return $(id).value.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+
+    async function saveProfilePolicy(event) {
+      event.preventDefault();
+      const response = await fetch(`/control/v1/profiles/${encodeURIComponent(activeProfile)}`, {
+        method: "PATCH", headers: authHeaders(true), body: JSON.stringify({
+          allowed_providers: commaList("profileAllowedProviders"),
+          allowed_services: commaList("profileAllowedServices"),
+          allowed_models: commaList("profileAllowedModels")
+        })
+      });
+      $("profileDialogNotice").textContent = response.ok ? "Access policy saved." : `Could not save access policy (${response.status}).`;
       if (response.ok) { await loadActiveProfile(); await refreshProfiles(); }
     }
 
@@ -596,6 +625,20 @@
         if (!response.ok) return;
         renderProfiles(await response.json());
       } catch { /* keep the last good render */ }
+    }
+
+    async function syncCatalog() {
+      const button = $("syncCatalogButton");
+      button.disabled = true;
+      const response = await fetch("/control/v1/services/sync", {
+        method: "POST", headers: authHeaders()
+      });
+      const result = await response.json().catch(() => ({}));
+      $("consoleNotice").textContent = response.ok
+        ? `Provider catalog synchronized (${result.count || 0} services).`
+        : `Provider catalog sync failed (${response.status}).`;
+      $("consoleNotice").classList.toggle("error", !response.ok);
+      button.disabled = false;
     }
 
     async function syncProfile(event) {
@@ -816,7 +859,9 @@
     $("enrollForm").addEventListener("submit", createEnrollment);
     $("deployForm").addEventListener("submit", requestQuote);
     $("profileBudgetForm").addEventListener("submit", saveProfileBudgets);
+    $("profilePolicyForm").addEventListener("submit", saveProfilePolicy);
     $("profileKeyForm").addEventListener("submit", createProfileKey);
+    $("syncCatalogButton").addEventListener("click", syncCatalog);
     $("closeProfileDialog").addEventListener("click", () => $("profileDialog").close());
     $("revokeKeyDialog").addEventListener("close", async () => {
       const action = $("revokeKeyDialog").returnValue;

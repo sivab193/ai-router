@@ -26,6 +26,20 @@
 		host localhost 127.0.0.1
 		path /v1/*
 	}
+	@local_catalog {
+		host localhost 127.0.0.1
+		path /v1/catalog
+	}
+	handle @local_catalog {
+		reverse_proxy control:8080
+	}
+	@local_documents {
+		host localhost 127.0.0.1
+		path /v1/documents/process
+	}
+	handle @local_documents {
+		reverse_proxy control:8080
+	}
 	handle @local_inference {
 		reverse_proxy litellm:4000
 	}
@@ -45,6 +59,21 @@
 		path_regexp runner_connect ^/control/v1/runners/[^/]+/connect$
 	}
 	handle @api_runner_connect {
+		reverse_proxy control:8080
+	}
+
+	@api_catalog {
+		host {$AI_ROUTER_PUBLIC_HOST:ai.siv19.dev}
+		path /v1/catalog
+	}
+	handle @api_catalog {
+		reverse_proxy control:8080
+	}
+	@api_documents {
+		host {$AI_ROUTER_PUBLIC_HOST:ai.siv19.dev}
+		path /v1/documents/process
+	}
+	handle @api_documents {
 		reverse_proxy control:8080
 	}
 

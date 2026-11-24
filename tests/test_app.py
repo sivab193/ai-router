@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from ai_router_control.app import create_app
+from ai_router_control.app import create_app, service_from_gateway_model
 from ai_router_control.config import Settings
 
 
@@ -29,6 +29,25 @@ def test_settings_fail_closed_without_admin_token(monkeypatch):
         assert "AI_ROUTER_ADMIN_TOKEN" in str(error)
     else:
         raise AssertionError("missing admin token should stop startup")
+
+
+def test_gateway_models_normalize_into_catalog_services():
+    service = service_from_gateway_model(
+        {
+            "id": "bedrock/claude-sonnet",
+            "owned_by": "bedrock",
+            "model_info": {
+                "display_name": "Claude Sonnet",
+                "input_modalities": ["text", "image"],
+                "max_input_tokens": 200000,
+                "supports_function_calling": True,
+            },
+        }
+    )
+    assert service is not None
+    assert service["provider"] == "bedrock"
+    assert service["kind"] == "vision_model"
+    assert service["capabilities"] == ["chat", "text", "tools", "vision"]
 
 
 def enrollment(client: TestClient):
@@ -63,6 +82,108 @@ def test_dashboard_assets_are_bundled(tmp_path):
     font = client.get("/install/fonts/SpaceGrotesk-Variable.ttf")
     assert font.status_code == 200
     assert len(font.content) > 100_000
+
+
+def test_catalog_is_filtered_by_organization_profile(tmp_path):
+    client = make_client(tmp_path)
+    store = client.app.state.store
+    store.upsert_service(
+        {
+            "id": "bedrock/claude",
+            "display_name": "Claude on Bedrock",
+            "provider": "bedrock",
+            "kind": "language_model",
+            "capabilities": ["text", "vision"],
+            "endpoints": ["/v1/chat/completions"],
+        }
+    )
+    store.upsert_service(
+        {
+            "id": "vertex/gemini",
+            "display_name": "Gemini on Vertex AI",
+            "provider": "google_vertex",
+            "kind": "vision_model",
+            "capabilities": ["text", "vision"],
+            "endpoints": ["/v1/chat/completions"],
+        }
+    )
+    store.update_profile(
+        "aayvu",
+        {
+            "allowed_providers": ["bedrock"],
+            "allowed_services": ["bedrock/claude", "vertex/gemini"],
+        },
+    )
+    store.add_profile_key("sk-aayvu", "aayvu", "aayvu-test")
+
+    denied = client.get("/v1/catalog")
+    assert denied.status_code == 401
+    catalog = client.get(
+        "/v1/catalog", headers={"Authorization": "Bearer sk-aayvu"}
+    )
+    assert catalog.status_code == 200
+    assert catalog.json()["profile_id"] == "aayvu"
+    assert catalog.json()["providers"] == ["bedrock"]
+    assert [item["id"] for item in catalog.json()["data"]] == ["bedrock/claude"]
+
+
+def test_admin_can_manage_document_services(tmp_path):
+    client = make_client(tmp_path)
+    headers = {"Authorization": "Bearer admin-test"}
+    service = {
+        "id": "google/document-ai",
+        "display_name": "Google Document AI",
+        "provider": "google_cloud",
+        "kind": "document_intelligence",
+        "capabilities": ["ocr", "layout", "tables", "forms"],
+        "endpoints": ["/v1/documents/process"],
+        "metadata": {"processor": "form-parser"},
+    }
+    created = client.put(
+        "/control/v1/services/google/document-ai", headers=headers, json=service
+    )
+    assert created.status_code == 200
+    assert created.json()["kind"] == "document_intelligence"
+    assert client.get("/control/v1/services", headers=headers).json()[0]["id"] == service["id"]
+    assert client.delete(
+        "/control/v1/services/google/document-ai", headers=headers
+    ).json() == {"deleted": True}
+
+
+def test_document_execution_enforces_profile_policy(tmp_path):
+    client = make_client(tmp_path)
+    store = client.app.state.store
+    store.upsert_service(
+        {
+            "id": "google/document-ai",
+            "display_name": "Google Document AI",
+            "provider": "google_cloud",
+            "kind": "document_intelligence",
+            "capabilities": ["ocr", "layout"],
+            "endpoints": ["/v1/documents/process"],
+            "metadata": {"internal_adapter_url": "must-not-leak"},
+        }
+    )
+    store.update_profile(
+        "aayvu",
+        {"allowed_providers": ["bedrock"], "allowed_services": ["google/document-ai"]},
+    )
+    store.add_profile_key("sk-docs", "aayvu", "documents")
+    headers = {"Authorization": "Bearer sk-docs"}
+
+    blocked = client.post(
+        "/v1/documents/process?service=google/document-ai", headers=headers, content=b"pdf"
+    )
+    assert blocked.status_code == 403
+
+    store.update_profile("aayvu", {"allowed_providers": ["google_cloud"]})
+    unavailable = client.post(
+        "/v1/documents/process?service=google/document-ai", headers=headers, content=b"pdf"
+    )
+    assert unavailable.status_code == 503
+
+    catalog = client.get("/v1/catalog", headers=headers).json()
+    assert "metadata" not in catalog["data"][0]
 
 
 def test_admin_auth_and_single_use_enrollment(tmp_path):

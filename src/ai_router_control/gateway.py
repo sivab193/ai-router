@@ -201,6 +201,14 @@ class LiteLLMGateway:
         keys = data.get("keys") or data.get("data") or []
         return [item for item in keys if isinstance(item, dict)]
 
+    async def list_models(self) -> list[dict[str, Any]]:
+        """Return the standard model catalog visible to the control key."""
+        data = await self._get("/v1/models")
+        if data is None:
+            raise GatewayError("LiteLLM /v1/models is unavailable")
+        models = data.get("data") or data.get("models") or []
+        return [item for item in models if isinstance(item, dict)]
+
     async def delete_key(self, key_hash: str) -> None:
         """Revoke one LiteLLM virtual key by its stored SHA-256 hash."""
         await self._post("/key/delete", {"keys": [key_hash]})

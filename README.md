@@ -30,6 +30,10 @@ Cloudflare account.
 - Profiles (`personal`, `aayvu`, `splitllm`, `everything-else`) mapped onto
   LiteLLM Teams, with per-profile budgets, model allowlists, spend sync,
   and budget/token alerts.
+- A tenant-aware capability catalog for language and vision models, embeddings,
+  OCR, and document-intelligence services. Profiles can restrict both providers
+  and individual services, so an organization can be Bedrock-only, Google-only,
+  or use a curated mix without receiving provider credentials.
 - A model hub: a registry of models with immutable versions, KitOps/ModelKit
   packaging, and one-click deploys to GCP, RunPod, Vast.ai, Colab, and the
   home fleet — with automatic registration into the router and one-click
@@ -114,7 +118,7 @@ Useful runner options:
 ```text
 --vllm-url http://127.0.0.1:8000  # default
 --vllm-api-key <key>              # or VLLM_API_KEY
---model-alias local/qwen-coder    # default: local/<runner-name>
+--model-alias local/qwen-coder    # provider/service alias; default: local/<runner-name>
 --max-model-len 65536             # fallback for older vLLM model cards
 --reset                           # discard saved runner identity and re-enroll
 ```
@@ -148,6 +152,18 @@ the LiteLLM master key in an application.
 export OPENAI_BASE_URL=https://ai.siv19.dev/v1
 export OPENAI_API_KEY=sk-your-virtual-key
 ```
+
+The same key returns only the services permitted for its profile:
+
+```bash
+curl https://ai.siv19.dev/v1/catalog \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+
+The operator can synchronize configured LiteLLM model aliases into the catalog
+with `POST /control/v1/services/sync`; outbound runners register their own
+services when they enroll. OCR and document adapters can be registered through
+the service control API and served through an outbound runner.
 
 Claude Code, Codex, SDK, and curl examples are in
 [docs/CONNECT_CLIENTS.md](docs/CONNECT_CLIENTS.md).

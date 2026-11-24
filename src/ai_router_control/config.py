@@ -28,6 +28,7 @@ class Settings:
     heartbeat_ttl_seconds: int
     request_start_timeout_seconds: int
     request_idle_timeout_seconds: int
+    spend_sync_interval_seconds: int = 900
     # Model hub (Phase 6). All optional; the hub degrades gracefully
     # without them (local-only registry, operator-run provisioning).
     hub_nas_path: str | None = None
@@ -49,6 +50,7 @@ class Settings:
             heartbeat_ttl_seconds=_int_env("AI_ROUTER_HEARTBEAT_TTL_SECONDS", 30),
             request_start_timeout_seconds=_int_env("AI_ROUTER_REQUEST_START_TIMEOUT_SECONDS", 90),
             request_idle_timeout_seconds=_int_env("AI_ROUTER_REQUEST_IDLE_TIMEOUT_SECONDS", 300),
+            spend_sync_interval_seconds=_int_env("AI_ROUTER_SPEND_SYNC_INTERVAL_SECONDS", 900),
             hub_nas_path=os.getenv("AI_ROUTER_NAS_PATH") or None,
             oci_registry=os.getenv("AI_ROUTER_OCI_REGISTRY") or None,
             gcp_project=os.getenv("AI_ROUTER_GCP_PROJECT") or None,

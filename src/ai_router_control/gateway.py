@@ -201,6 +201,10 @@ class LiteLLMGateway:
         keys = data.get("keys") or data.get("data") or []
         return [item for item in keys if isinstance(item, dict)]
 
+    async def delete_key(self, key_hash: str) -> None:
+        """Revoke one LiteLLM virtual key by its stored SHA-256 hash."""
+        await self._post("/key/delete", {"keys": [key_hash]})
+
 
 def _primary_model(snapshot: dict[str, Any]) -> dict[str, Any]:
     models = snapshot.get("models")

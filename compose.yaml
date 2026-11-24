@@ -79,6 +79,7 @@ services:
       AI_ROUTER_GCP_ZONE: ${AI_ROUTER_GCP_ZONE:-us-central1-a}
       AI_ROUTER_GCP_AUTO_PROVISION: ${AI_ROUTER_GCP_AUTO_PROVISION:-0}
       AI_ROUTER_VLLM_IMAGE: ${AI_ROUTER_VLLM_IMAGE:-vllm/vllm-openai:latest}
+      AI_ROUTER_SPEND_SYNC_INTERVAL_SECONDS: ${AI_ROUTER_SPEND_SYNC_INTERVAL_SECONDS:-900}
     volumes:
       - control-data:/data
     expose:
@@ -105,7 +106,6 @@ services:
     image: caddy:2.10-alpine
     environment:
       AI_ROUTER_PUBLIC_HOST: ${AI_ROUTER_PUBLIC_HOST:-ai.siv19.dev}
-      AI_ROUTER_ADMIN_HOST: ${AI_ROUTER_ADMIN_HOST:-admin.ai.siv19.dev}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
     ports:

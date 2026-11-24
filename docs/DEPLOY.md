@@ -20,9 +20,10 @@ The host binds:
 
 On the inference hostname, the Caddy origin permits `/v1/*`, `/install/*`,
 `/healthz`, the runner enrollment endpoint, and authenticated runner WebSocket
-connections. The root console and administrative control routes are available
-only on the separate admin hostname. LiteLLM management routes such as `/ui`,
-`/key`, `/model`, `/user`, and `/config` remain unavailable through Caddy.
+connections. The root console, control routes, and LiteLLM management routes
+such as `/ui`, `/key`, `/model`, `/user`, and `/config` remain unavailable on
+the public hostname. Operators reach the loopback dashboard through a private,
+identity-aware channel supplied by their hosting platform.
 
 ## 2. Create the tunnel route
 
@@ -32,7 +33,6 @@ private location, replace the tunnel ID, credential path, and hostname, then:
 ```bash
 cloudflared tunnel --config /private/path/config.yml ingress validate
 cloudflared tunnel route dns YOUR_TUNNEL_ID ai.example.com
-cloudflared tunnel route dns YOUR_TUNNEL_ID admin.ai.example.com
 cloudflared tunnel --config /private/path/config.yml run
 ```
 
@@ -40,12 +40,8 @@ Keep the final catch-all `http_status:404` rule. Run cloudflared as a supervised
 system service and preserve WebSocket upgrades. Do not commit the tunnel JSON or
 private deployment config.
 
-Before publishing the admin DNS record, create a self-hosted Cloudflare Access
-application for `admin.ai.example.com`. Attach a reusable allow policy scoped to
-the intended Cloudflare account members (or a tightly controlled identity
-group), leave the implicit deny in place, and use a short session lifetime. The
-`AI_ROUTER_ADMIN_TOKEN` remains a second authentication layer until the control
-plane validates Access JWTs directly.
+Do not add an administrative hostname to this tunnel. Keep
+`AI_ROUTER_ADMIN_TOKEN` enabled as defense in depth on the private dashboard.
 
 ## 3. Verify exposure
 
@@ -56,13 +52,10 @@ curl -i https://ai.example.com/control/v1/runners
 curl -i https://ai.example.com/ui
 curl -i https://ai.example.com/model/info
 curl -i https://ai.example.com/v1/models
-curl -i https://admin.ai.example.com/
 ```
 
-Expected results are 200, 404, 404, 404, 404, 401, and an Access login redirect
-respectively. The inference 401 proves the route is present but requires a
-LiteLLM key. A direct 200 from the admin hostname without an Access session is a
-deployment failure: remove its DNS route until the Access policy is fixed.
+Expected results are 200, 404, 404, 404, 404, and 401 respectively. The
+inference 401 proves the route is present but requires a LiteLLM key.
 
 ## Operations
 
@@ -74,8 +67,8 @@ deployment failure: remove its DNS route until the Access policy is fixed.
 - Revoke runner identities that are lost or no longer rented.
 - Patch the gateway OS, Docker, cloudflared, and the pinned container images.
 - Test database and salt-key restoration before depending on the service.
-- Periodically review the Access policy, identity-provider MFA, active sessions,
-  and account membership for the admin hostname.
+- Periodically review private operator access, identity-provider MFA, active
+  sessions, and account membership.
 
 ## Upgrade
 

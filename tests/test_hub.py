@@ -377,6 +377,26 @@ def test_deploy_budget_exhausted(tmp_path):
     assert deploy(client, q["id"]).status_code == 409
 
 
+def test_gpu_budget_is_enforced_independently(tmp_path):
+    client, app = make_app(tmp_path)
+    app.state.store.record_daily_usage(
+        "personal",
+        datetime.now(UTC).strftime("%Y-%m-%d"),
+        provider_spend_usd=0.0,
+        gpu_cost_usd=25.0,
+        prompt_tokens=0,
+        completion_tokens=0,
+        requests=0,
+        source="test",
+    )
+    q = quote(client, "qwen-image-2.1", "gcp-l4")
+    assert q["budget_remaining_usd"] == 25.0
+    assert q["gpu_budget_remaining_usd"] == 0.0
+    assert q["fit"] == "refused"
+    assert "GPU budget" in q["fit_reason"]
+    assert deploy(client, q["id"]).status_code == 422
+
+
 def test_enrollment_links_deployment_and_opens_allowlist(tmp_path):
     client, _ = make_app(tmp_path)
     q = quote(client, "qwen-image-2.1", "fleet-rog")

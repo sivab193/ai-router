@@ -74,10 +74,10 @@ cd ai-router
 ./scripts/start.sh
 ```
 
-Open `http://127.0.0.1:8088` locally or the Cloudflare Access-protected
-`https://admin.ai.siv19.dev` console. Enter `AI_ROUTER_ADMIN_TOKEN` from `.env`
-when the console asks. LiteLLM's management UI is intentionally loopback-only at
-`http://127.0.0.1:4000/ui`; sign in with `LITELLM_MASTER_KEY`.
+Open `http://127.0.0.1:8088` locally. For a hosted installation, reach the same
+dashboard through a private identity-aware operator channel and enter
+`AI_ROUTER_ADMIN_TOKEN` when prompted. LiteLLM's management UI is an internal
+implementation detail; routine operation happens only in the AI Router dashboard.
 
 The startup script creates independent random credentials, starts Postgres,
 Redis, and LiteLLM, provisions the route-restricted control key, builds the
@@ -86,6 +86,8 @@ Git.
 
 For a public installation and Cloudflare Tunnel example, see
 [docs/DEPLOY.md](docs/DEPLOY.md).
+The provider-neutral system and trust-boundary diagram is in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Connect a vLLM machine
 
@@ -139,8 +141,8 @@ compatibility.
 
 ## Connect applications
 
-Create a scoped virtual key in the loopback-only LiteLLM UI. Do not place the
-master key in an application.
+Create and revoke scoped virtual keys from the AI Router dashboard. Do not place
+the LiteLLM master key in an application.
 
 ```bash
 export OPENAI_BASE_URL=https://ai.siv19.dev/v1
@@ -174,9 +176,9 @@ manager, and separate virtual keys with budgets for every client. Read
 [SECURITY.md](SECURITY.md) before a multi-user or business deployment.
 
 The public inference hostname does not expose the console or administrative
-control routes. The separate admin hostname should be protected by a default-deny
-Cloudflare Access application. The application bearer token remains a second
-layer and should still be stored like a password.
+control routes. The dashboard is reached through a private identity-aware
+operator channel. The application bearer token remains a second layer and
+should still be stored like a password.
 
 ## Development
 

@@ -209,6 +209,19 @@
     .alert-chip { display: inline-block; margin: 10px 6px 0 0; padding: 3px 8px; border: 1px solid #71403d; border-radius: 6px; color: var(--danger); font: 12px var(--mono); }
     .sync-state { color: var(--faint); font: 12px var(--mono); margin-top: 10px; overflow-wrap: anywhere; }
     .profile-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .key-list { list-style: none; margin: 18px 0 0; padding: 0; border-top: 1px solid var(--seam); }
+    .key-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--seam); }
+    .key-row strong, .key-row span { display: block; overflow-wrap: anywhere; }
+    .key-row span { margin-top: 4px; color: var(--faint); font: 12px var(--mono); }
+    .key-row.revoked { opacity: .65; }
+    dialog { width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; color: var(--ink); background: var(--surface); border: 1px solid var(--seam-strong); border-radius: var(--radius); padding: 24px; }
+    dialog:modal { overscroll-behavior: contain; }
+    dialog::backdrop { background: rgb(2 5 7 / .78); overflow: hidden; overscroll-behavior: contain; }
+    dialog h1 { margin: 0; font-size: 24px; letter-spacing: -.025em; }
+    .dialog-copy { color: var(--muted); margin: 8px 0 20px; }
+    .dialog-form { display: grid; gap: 14px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    .secret-output { margin-top: 18px; }
     .hub-table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
     .hub-table th { text-align: left; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--seam-strong); }
     .hub-table td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--seam); vertical-align: top; }
@@ -308,7 +321,7 @@
       </div>
 
       <section class="lower" id="profiles">
-        <div class="section-head"><h2>Profiles</h2><span>one LiteLLM team each · spend splits provider vs GPU</span></div>
+        <div class="section-head"><h2>Profiles</h2><span>provider and GPU ledgers · automatic sync every 15 minutes</span></div>
         <div class="profile-grid" id="profileGrid"></div>
       </section>
 
@@ -328,6 +341,36 @@
       </section>
     </section>
   </main>
+
+  <dialog id="profileDialog" aria-labelledby="profileDialogTitle">
+    <h1 id="profileDialogTitle">Manage profile</h1>
+    <p class="dialog-copy" id="profileDialogCopy"></p>
+    <form class="dialog-form" id="profileBudgetForm">
+      <label class="field"><span>Monthly total budget (USD)</span><input id="profileMonthlyBudget" type="number" min="0" step="0.01"></label>
+      <label class="field"><span>Monthly GPU budget (USD)</span><input id="profileGpuBudget" type="number" min="0" step="0.01"></label>
+      <div class="dialog-actions"><button class="button" type="submit">Save budgets</button></div>
+    </form>
+    <form class="dialog-form" id="profileKeyForm">
+      <label class="field"><span>New key alias</span><input id="profileKeyAlias" maxlength="80" required autocomplete="off"></label>
+      <div class="dialog-actions"><button class="button primary" type="submit">Create virtual key</button></div>
+    </form>
+    <div class="secret-output" id="profileKeySecret" hidden>
+      <p class="dialog-copy">Copy this key now. It will not be shown again.</p>
+      <code class="command" id="profileKeyValue"></code>
+    </div>
+    <ul class="key-list" id="profileKeyList"></ul>
+    <p class="notice" id="profileDialogNotice" aria-live="polite"></p>
+    <div class="dialog-actions"><button class="button" type="button" id="closeProfileDialog" autofocus>Close</button></div>
+  </dialog>
+
+  <dialog id="revokeKeyDialog" aria-labelledby="revokeKeyTitle">
+    <h1 id="revokeKeyTitle">Revoke this key?</h1>
+    <p class="dialog-copy" id="revokeKeyCopy"></p>
+    <form method="dialog" class="dialog-actions">
+      <button class="button" value="cancel" autofocus>Keep key</button>
+      <button class="button danger" value="revoke">Revoke key</button>
+    </form>
+  </dialog>
 
   <script>
     const state = { token: sessionStorage.getItem("ai-router-admin-token") || "", timer: null };
@@ -465,14 +508,86 @@
           <p class="desc">${escapeHtml(profile.description || "")}</p>
           <div class="spend"><strong>${money(profile.month_spend_usd)}</strong> this month<br>
             provider ${money(profile.month_provider_spend_usd)} · GPU ${money(profile.month_gpu_cost_usd)}<br>
-            budget remaining: ${money(profile.budget_remaining_usd)}<br>${escapeHtml(projection)}</div>
+            total remaining: ${money(profile.budget_remaining_usd)} · GPU remaining: ${money(profile.gpu_budget_remaining_usd)}<br>${escapeHtml(projection)}</div>
           <div class="sync-state">${syncState} · ${profile.key_count} key${profile.key_count === 1 ? "" : "s"}</div>
           <div>${alerts}</div>
-          <div class="profile-actions"><button class="button sync-profile" type="button" data-profile-id="${escapeHtml(profile.id)}">Sync spend</button></div>
+          <div class="profile-actions"><button class="button manage-profile" type="button" data-profile-id="${escapeHtml(profile.id)}">Manage</button><button class="button sync-profile" type="button" data-profile-id="${escapeHtml(profile.id)}">Sync spend</button></div>
         </div>`;
       }).join("");
       if (html !== lastProfileHtml) { $("profileGrid").innerHTML = html; lastProfileHtml = html; }
       document.querySelectorAll(".sync-profile").forEach((button) => button.addEventListener("click", syncProfile));
+      document.querySelectorAll(".manage-profile").forEach((button) => button.addEventListener("click", openProfile));
+    }
+
+    let activeProfile = null;
+    let pendingKeyRevoke = null;
+
+    function renderProfileKeys(keys) {
+      $("profileKeyList").innerHTML = keys.length ? keys.map((key) => `<li class="key-row ${key.status === "revoked" ? "revoked" : ""}">
+        <div><strong>${escapeHtml(key.key_alias)}</strong><span>${escapeHtml(key.status)} · ${escapeHtml(key.id.slice(0, 12))}…</span></div>
+        ${key.status === "active" ? `<button class="button danger revoke-key" type="button" data-key-id="${escapeHtml(key.id)}" data-key-alias="${escapeHtml(key.key_alias)}">Revoke</button>` : ""}
+      </li>`).join("") : `<li class="empty"><strong>No managed keys</strong><p>Create a scoped virtual key for this profile.</p></li>`;
+      document.querySelectorAll(".revoke-key").forEach((button) => button.addEventListener("click", confirmKeyRevocation));
+    }
+
+    async function loadActiveProfile() {
+      const response = await fetch(`/control/v1/profiles/${encodeURIComponent(activeProfile)}`, { headers: authHeaders() });
+      if (!response.ok) throw new Error(`Could not load profile (${response.status}).`);
+      const profile = await response.json();
+      $("profileDialogTitle").textContent = `Manage ${profile.name}`;
+      $("profileDialogCopy").textContent = `${profile.id} · ${profile.key_count} active key${profile.key_count === 1 ? "" : "s"}`;
+      $("profileMonthlyBudget").value = profile.monthly_budget_usd ?? "";
+      $("profileGpuBudget").value = profile.gpu_budget_usd ?? "";
+      renderProfileKeys(profile.keys || []);
+    }
+
+    async function openProfile(event) {
+      activeProfile = event.currentTarget.dataset.profileId;
+      $("profileKeySecret").hidden = true;
+      $("profileDialogNotice").textContent = "";
+      $("profileDialog").showModal();
+      try { await loadActiveProfile(); } catch (error) { $("profileDialogNotice").textContent = error.message; }
+    }
+
+    async function saveProfileBudgets(event) {
+      event.preventDefault();
+      const response = await fetch(`/control/v1/profiles/${encodeURIComponent(activeProfile)}`, {
+        method: "PATCH", headers: authHeaders(true), body: JSON.stringify({
+          monthly_budget_usd: Number($("profileMonthlyBudget").value),
+          gpu_budget_usd: Number($("profileGpuBudget").value)
+        })
+      });
+      $("profileDialogNotice").textContent = response.ok ? "Budgets saved." : `Could not save budgets (${response.status}).`;
+      if (response.ok) { await loadActiveProfile(); await refreshProfiles(); }
+    }
+
+    async function createProfileKey(event) {
+      event.preventDefault();
+      const response = await fetch(`/control/v1/profiles/${encodeURIComponent(activeProfile)}/keys`, {
+        method: "POST", headers: authHeaders(true), body: JSON.stringify({ key_alias: $("profileKeyAlias").value.trim() })
+      });
+      if (!response.ok) { $("profileDialogNotice").textContent = `Could not create key (${response.status}).`; return; }
+      const result = await response.json();
+      $("profileKeyValue").textContent = result.key;
+      $("profileKeySecret").hidden = false;
+      $("profileKeyAlias").value = "";
+      $("profileDialogNotice").textContent = "Virtual key created. Copy it before closing.";
+      await loadActiveProfile(); await refreshProfiles();
+    }
+
+    function confirmKeyRevocation(event) {
+      pendingKeyRevoke = event.currentTarget.dataset.keyId;
+      $("revokeKeyCopy").textContent = `${event.currentTarget.dataset.keyAlias} will stop working immediately. This cannot be undone.`;
+      $("revokeKeyDialog").showModal();
+    }
+
+    async function revokeProfileKey() {
+      const response = await fetch(`/control/v1/profiles/${encodeURIComponent(activeProfile)}/keys/${encodeURIComponent(pendingKeyRevoke)}`, {
+        method: "DELETE", headers: authHeaders()
+      });
+      $("profileDialogNotice").textContent = response.ok ? "Key revoked." : `Could not revoke key (${response.status}).`;
+      pendingKeyRevoke = null;
+      if (response.ok) { await loadActiveProfile(); await refreshProfiles(); }
     }
 
     async function refreshProfiles() {
@@ -589,7 +704,7 @@
         <div><strong>${escapeHtml(quote.model_display_name)}</strong> on ${escapeHtml(quote.target_label)} (${escapeHtml(quote.gpu)})</div>
         <div>Alias: <span class="mono">${escapeHtml(quote.alias)}</span></div>
         <div class="fit-${escapeHtml(quote.fit)}">Fit: ${escapeHtml(quote.fit)} — ${escapeHtml(quote.fit_reason)}</div>
-        <div>Hourly cost: $${quote.hourly_cost_usd.toFixed(2)} (${escapeHtml(quote.pricing_source)}) · profile ${escapeHtml(quote.profile_id)} · budget remaining ${money(quote.budget_remaining_usd)}</div>
+        <div>Hourly cost: $${quote.hourly_cost_usd.toFixed(2)} (${escapeHtml(quote.pricing_source)}) · profile ${escapeHtml(quote.profile_id)} · total remaining ${money(quote.budget_remaining_usd)} · GPU remaining ${money(quote.gpu_budget_remaining_usd)}</div>
         ${override}${deployButton}
         <div id="deployResult" style="margin-top:12px"></div>`;
       const deployBtn = $("deployButton");
@@ -700,6 +815,15 @@
     });
     $("enrollForm").addEventListener("submit", createEnrollment);
     $("deployForm").addEventListener("submit", requestQuote);
+    $("profileBudgetForm").addEventListener("submit", saveProfileBudgets);
+    $("profileKeyForm").addEventListener("submit", createProfileKey);
+    $("closeProfileDialog").addEventListener("click", () => $("profileDialog").close());
+    $("revokeKeyDialog").addEventListener("close", async () => {
+      const action = $("revokeKeyDialog").returnValue;
+      $("revokeKeyDialog").returnValue = "";
+      if (action === "revoke") await revokeProfileKey();
+      else pendingKeyRevoke = null;
+    });
     $("refreshButton").addEventListener("click", () => refreshRunners(true));
     $("forgetButton").addEventListener("click", () => {
       sessionStorage.removeItem("ai-router-admin-token");

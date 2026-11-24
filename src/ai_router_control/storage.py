@@ -75,7 +75,8 @@ class Store:
                     key_alias TEXT NOT NULL,
                     migrated INTEGER NOT NULL DEFAULT 0,
                     migration_note TEXT,
-                    created_at REAL NOT NULL
+                    created_at REAL NOT NULL,
+                    revoked_at REAL
                 );
 
                 CREATE TABLE IF NOT EXISTS profile_usage_daily (
@@ -173,6 +174,11 @@ class Store:
                 );
                 """
             )
+            columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(profile_keys)")
+            }
+            if "revoked_at" not in columns:
+                connection.execute("ALTER TABLE profile_keys ADD COLUMN revoked_at REAL")
         self._seed_profiles()
         self._seed_hub_models()
 
@@ -536,6 +542,14 @@ class Store:
                 (profile_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def revoke_profile_key(self, key_hash: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE profile_keys SET revoked_at = ? WHERE key_hash = ? AND revoked_at IS NULL",
+                (time.time(), key_hash),
+            )
+        return cursor.rowcount == 1
 
     def record_daily_usage(
         self,

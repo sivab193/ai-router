@@ -12,15 +12,8 @@
 		X-Frame-Options "DENY"
 	}
 
-	# The administrative hostname is protected by Cloudflare Access. Keep the
-	# application-level bearer token enabled as a second authentication layer.
-	@admin host {$AI_ROUTER_ADMIN_HOST:admin.ai.siv19.dev}
-	handle @admin {
-		reverse_proxy control:8080
-	}
-
-	# Preserve the complete console locally for recovery and maintenance without
-	# making its administrative routes reachable on the public API hostname.
+	# The complete console is loopback-only. Reach it through the deployment's
+	# private operator channel; never publish a second administrative hostname.
 	@local_control {
 		host localhost 127.0.0.1
 		path / /healthz /control/* /install/*

@@ -32,13 +32,14 @@ Create a key scoped to a profile from the control plane (the LiteLLM UI
 still works for unscoped keys, but those are not attributed):
 
 ```bash
-curl -X POST https://admin.ai.siv19.dev/control/v1/profiles/aayvu/keys \
+curl -X POST http://127.0.0.1:8088/control/v1/profiles/example/keys \
   -H "Authorization: Bearer $AI_ROUTER_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"key_alias": "aayvu-backend"}'
+  -d '{"key_alias": "example-backend"}'
 ```
 
-The raw key is shown once; the control plane stores only its hash. Key
+The raw key is shown once; the control plane stores only its hash. Active keys
+are listed and revoked from the same dashboard, without exposing LiteLLM's UI. Key
 creation fails closed: models outside the profile allowlist are rejected
 (422), and a profile whose month spend has reached its budget gets no new
 keys (409). If the profile has no LiteLLM team yet, the first key creation
@@ -46,8 +47,9 @@ creates it.
 
 ### Spend sync and alerts
 
+Every profile is synchronized automatically every 15 minutes by default.
 `POST /control/v1/profiles/{id}/sync` (or the **Sync spend** button in the
-console) does three things:
+console) triggers the same work immediately:
 
 1. Creates or updates the LiteLLM team from the profile definition.
 2. Pulls the last 30 days of team spend from LiteLLM into
@@ -76,8 +78,10 @@ merged into one number that could read as a cloud API invoice:
 - **GPU cost** (`gpu_cost_usd`) is allocated from hub deployments:
   `hourly_cost_usd × active time`, attributed to the deployment's profile.
 
-The dashboard shows both lines plus the total. The monthly budget covers
-the total.
+The dashboard shows both lines plus the total. The monthly budget covers the
+total, while the GPU budget independently blocks new paid GPU deployments once
+its own allocation is exhausted. Existing machines are not destroyed
+automatically; teardown remains an explicit operator action.
 
 ### Migrating existing keys
 
@@ -86,14 +90,14 @@ Migrate them once:
 
 ```bash
 # Discover keys from LiteLLM and map them by tag/alias:
-curl -X POST https://admin.ai.siv19.dev/control/v1/profiles/migrate-keys \
+curl -X POST http://127.0.0.1:8088/control/v1/profiles/migrate-keys \
   -H "Authorization: Bearer $AI_ROUTER_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"discover": true}'
 
 # Or supply keys explicitly (raw key or its hash; raw keys are hashed
 # immediately and never stored):
-curl -X POST https://admin.ai.siv19.dev/control/v1/profiles/migrate-keys \
+curl -X POST http://127.0.0.1:8088/control/v1/profiles/migrate-keys \
   -H "Authorization: Bearer $AI_ROUTER_ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"keys": [{"key_alias": "aayvu-demo", "key": "sk-...", "tags": ["aayvu"]}]}'
@@ -216,11 +220,11 @@ operator. Routing never outlives teardown.
 
 ### Control key routes
 
-The route-restricted LiteLLM control key now also covers the profile
-routes: `/team/new`, `/team/update`, `/team/delete`, `/team/info`,
-`/team/daily/activity`, `/key/generate`, `/key/list`. After upgrading, re-run
-`scripts/provision-control-key.py` — it detects the route change and
-re-provisions the key.
+The route-restricted LiteLLM control key covers the profile routes:
+`/team/new`, `/team/update`, `/team/delete`, `/team/info`,
+`/team/daily/activity`, `/key/generate`, `/key/list`, and `/key/delete`.
+After upgrading, re-run `scripts/provision-control-key.py` — it detects the
+route change and re-provisions the key.
 
 ### Known limits
 

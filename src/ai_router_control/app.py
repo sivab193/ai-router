@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -87,7 +88,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = Store(configured.database_path)
     relay = RelayManager()
     gateway = LiteLLMGateway(configured)
-    app = FastAPI(title="ai-router control plane", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        task = None
+        if configured.spend_sync_interval_seconds > 0:
+            task = asyncio.create_task(scheduled_spend_sync())
+            application.state.spend_sync_task = task
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    app = FastAPI(title="ai-router control plane", version="0.1.0", lifespan=lifespan)
     app.state.settings = configured
     app.state.store = store
     app.state.relay = relay
@@ -230,6 +247,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         month = now.strftime("%Y-%m")
         provider_spend, gpu_cost = store.month_spend(profile["id"], month)
         budget = profile.get("monthly_budget_usd")
+        gpu_budget = profile.get("gpu_budget_usd")
         total = provider_spend + gpu_cost
         days_in_month = calendar.monthrange(now.year, now.month)[1]
         daily = store.get_daily_usage(profile["id"], limit=31)
@@ -246,9 +264,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "daily_burn_rate_usd": rate,
             "projected_month_spend_usd": projection,
             "budget_remaining_usd": (budget - total) if budget is not None else None,
+            "gpu_budget_remaining_usd": (gpu_budget - gpu_cost) if gpu_budget is not None else None,
             "team_synced": bool(profile.get("litellm_team_id")),
             "unacknowledged_alerts": store.list_alerts(profile["id"], unacknowledged_only=True),
-            "key_count": len(store.list_profile_keys(profile["id"])),
+            "key_count": sum(
+                item.get("revoked_at") is None for item in store.list_profile_keys(profile["id"])
+            ),
         }
 
     @app.get("/control/v1/profiles", dependencies=[Depends(require_admin)])
@@ -274,10 +295,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="profile not found")
         summary = profile_summary(profile)
         summary["daily_usage"] = store.get_daily_usage(profile_id)
-        summary["keys"] = [
-            {key: value for key, value in item.items() if key != "key_hash"}
-            for item in store.list_profile_keys(profile_id)
-        ]
+        summary["keys"] = [public_profile_key(item) for item in store.list_profile_keys(profile_id)]
         return summary
 
     @app.patch("/control/v1/profiles/{profile_id}", dependencies=[Depends(require_admin)])
@@ -349,6 +367,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "models": models,
             "note": "shown once; the control plane stores only a hash of the key",
         }
+
+    @app.delete(
+        "/control/v1/profiles/{profile_id}/keys/{key_id}",
+        dependencies=[Depends(require_admin)],
+    )
+    async def revoke_profile_key(profile_id: str, key_id: str) -> dict[str, Any]:
+        key = store.get_profile_key_by_hash(key_id)
+        if key is None or key["profile_id"] != profile_id:
+            raise HTTPException(status_code=404, detail="profile key not found")
+        if key.get("revoked_at") is not None:
+            raise HTTPException(status_code=409, detail="profile key is already revoked")
+        if not gateway.enabled:
+            raise HTTPException(status_code=503, detail="LiteLLM gateway is not configured")
+        try:
+            await gateway.delete_key(key_id)
+        except GatewayError as error:
+            raise HTTPException(status_code=502, detail=f"LiteLLM key revocation failed: {error}") from error
+        store.revoke_profile_key(key_id)
+        updated = store.get_profile_key_by_hash(key_id)
+        assert updated is not None
+        return public_profile_key(updated)
 
     @app.post("/control/v1/profiles/{profile_id}/sync", dependencies=[Depends(require_admin)])
     async def sync_profile(profile_id: str) -> dict[str, Any]:
@@ -448,6 +487,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         result["alerts_fired"] = fired
         result["summary"] = profile_summary(store.get_profile(profile_id))
         return result
+
+    async def scheduled_spend_sync() -> None:
+        interval = configured.spend_sync_interval_seconds
+        while interval > 0:
+            await asyncio.sleep(interval)
+            for profile in store.list_profiles():
+                try:
+                    await sync_profile(profile["id"])
+                except Exception:
+                    # One unavailable gateway or malformed response must not
+                    # stop later profiles or future sync cycles.
+                    continue
 
     @app.post("/control/v1/profiles/migrate-keys", dependencies=[Depends(require_admin)])
     async def migrate_keys(body: MigrationRequest) -> dict[str, Any]:
@@ -614,6 +665,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         provider_spend, gpu_cost = store.month_spend(body.profile_id, month)
         budget = profile.get("monthly_budget_usd")
         remaining = (budget - provider_spend - gpu_cost) if budget is not None else None
+        gpu_budget = profile.get("gpu_budget_usd")
+        gpu_remaining = (gpu_budget - gpu_cost) if gpu_budget is not None else None
+        if gpu_remaining is not None and gpu_remaining <= 0 and target.hourly_cost_usd > 0:
+            fit, fit_reason = "refused", "profile GPU budget is exhausted"
         quote = store.create_quote(
             {
                 "id": f"quote_{uuid.uuid4().hex[:16]}",
@@ -639,6 +694,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "target_notes": target.notes,
             "provision": target.provision,
             "month_spend_usd": provider_spend + gpu_cost,
+            "month_gpu_cost_usd": gpu_cost,
+            "gpu_budget_remaining_usd": gpu_remaining,
         }
 
     @app.post("/control/v1/hub/deployments", dependencies=[Depends(require_admin)], status_code=201)
@@ -666,6 +723,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             provider_spend, gpu_cost = store.month_spend(profile["id"], month)
             if provider_spend + gpu_cost >= budget:
                 raise HTTPException(status_code=409, detail="profile monthly budget is exhausted")
+        gpu_budget = profile.get("gpu_budget_usd")
+        if gpu_budget is not None:
+            month = datetime.now(UTC).strftime("%Y-%m")
+            _provider_spend, gpu_cost = store.month_spend(profile["id"], month)
+            if gpu_cost >= gpu_budget:
+                raise HTTPException(status_code=409, detail="profile GPU budget is exhausted")
         if not store.consume_quote(body.quote_id):
             raise HTTPException(status_code=410, detail="quote expired or already used")
         model, version = resolve_hub_version(quote["model_id"], quote["version"])
@@ -998,6 +1061,19 @@ async def link_hub_deployment(
 def public_runner(runner: dict[str, Any]) -> dict[str, Any]:
     allowed = set(RunnerView.model_fields)
     return {key: value for key, value in runner.items() if key in allowed}
+
+
+def public_profile_key(key: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": key["key_hash"],
+        "profile_id": key["profile_id"],
+        "key_alias": key["key_alias"],
+        "migrated": bool(key.get("migrated")),
+        "migration_note": key.get("migration_note"),
+        "created_at": key["created_at"],
+        "revoked_at": key.get("revoked_at"),
+        "status": "revoked" if key.get("revoked_at") is not None else "active",
+    }
 
 
 def slug(value: str) -> str:

@@ -41,6 +41,7 @@ class FakeGateway:
 
     daily_rows: list[dict] = []
     keys: list[dict] = []
+    deleted_keys: list[str] = []
 
     def __init__(self, settings):
         self.settings = settings
@@ -68,6 +69,9 @@ class FakeGateway:
 
     async def list_keys(self):
         return list(self.keys)
+
+    async def delete_key(self, key_hash):
+        self.deleted_keys.append(key_hash)
 
     async def register(self, runner, proxy_token):
         return None
@@ -223,6 +227,7 @@ def test_profile_key_creation_and_budget_exhaustion(tmp_path, monkeypatch):
     assert detail["key_count"] == 1
     assert detail["team_synced"] is True
     assert "key_hash" not in detail["keys"][0]
+    assert detail["keys"][0]["status"] == "active"
     assert "sk-fake-profile-key" not in str(detail)
 
     store = app.state.store
@@ -242,6 +247,31 @@ def test_profile_key_creation_and_budget_exhaustion(tmp_path, monkeypatch):
         json={"key_alias": "second"},
     )
     assert exhausted.status_code == 409
+
+
+def test_profile_key_revocation_is_immediate_and_idempotent(tmp_path, monkeypatch):
+    FakeGateway.deleted_keys = []
+    monkeypatch.setattr("ai_router_control.app.LiteLLMGateway", FakeGateway)
+    client, _ = make_app(tmp_path)
+    assert client.post(
+        "/control/v1/profiles/personal/keys",
+        headers=ADMIN,
+        json={"key_alias": "temporary"},
+    ).status_code == 201
+    key = client.get("/control/v1/profiles/personal", headers=ADMIN).json()["keys"][0]
+
+    revoked = client.delete(
+        f"/control/v1/profiles/personal/keys/{key['id']}", headers=ADMIN
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["status"] == "revoked"
+    assert FakeGateway.deleted_keys == [key["id"]]
+    detail = client.get("/control/v1/profiles/personal", headers=ADMIN).json()
+    assert detail["key_count"] == 0
+    assert detail["keys"][0]["revoked_at"] is not None
+    assert client.delete(
+        f"/control/v1/profiles/personal/keys/{key['id']}", headers=ADMIN
+    ).status_code == 409
 
 
 # -- Sync and alerts ---------------------------------------------------------

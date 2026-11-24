@@ -27,6 +27,7 @@ ALLOWED_ROUTES = [
     "/team/daily/activity",
     "/key/generate",
     "/key/list",
+    "/key/delete",
 ]
 
 

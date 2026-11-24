@@ -36,8 +36,8 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: projects/370062953948/locations/global/workloadIdentityPools/github-actions/providers/ai-router
-          service_account: ai-router-deployer@aayvu-513001.iam.gserviceaccount.com
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v3
       - name: Package release
         run: git archive --format=tar.gz -o "/tmp/ai-router-${GITHUB_SHA}.tar.gz" HEAD
@@ -45,28 +45,28 @@ jobs:
         run: |
           cp scripts/deploy-release.sh "/tmp/deploy-release-${GITHUB_SHA}.sh"
           gcloud compute scp \
-            --project=aayvu-513001 \
-            --zone=us-central1-a \
+            --project="${{ secrets.GCP_PROJECT }}" \
+            --zone="${{ secrets.GCP_ZONE }}" \
             --tunnel-through-iap \
             "/tmp/ai-router-${GITHUB_SHA}.tar.gz" \
             "/tmp/deploy-release-${GITHUB_SHA}.sh" \
-            ai-router-gateway:/tmp/
+            "${{ secrets.GCP_VM }}:/tmp/"
       - name: Activate release
         run: >-
-          gcloud compute ssh ai-router-gateway
-          --project=aayvu-513001
-          --zone=us-central1-a
+          gcloud compute ssh "${{ secrets.GCP_VM }}"
+          --project="${{ secrets.GCP_PROJECT }}"
+          --zone="${{ secrets.GCP_ZONE }}"
           --tunnel-through-iap
           --command="sudo bash /tmp/deploy-release-${GITHUB_SHA}.sh /tmp/ai-router-${GITHUB_SHA}.tar.gz ${GITHUB_SHA}"
       - name: Verify production
         run: >-
-          gcloud compute ssh ai-router-gateway
-          --project=aayvu-513001
-          --zone=us-central1-a
+          gcloud compute ssh "${{ secrets.GCP_VM }}"
+          --project="${{ secrets.GCP_PROJECT }}"
+          --zone="${{ secrets.GCP_ZONE }}"
           --tunnel-through-iap
           --command="
-            curl --fail --show-error --silent --retry 12 --retry-delay 5 http://127.0.0.1:8088/healthz -H 'Host: ai.siv19.dev' &&
-            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/ -H 'Host: ai.siv19.dev')\" = 404 &&
-            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/control/v1/runners -H 'Host: ai.siv19.dev')\" = 404 &&
-            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/v1/models -H 'Host: ai.siv19.dev')\" = 401
+            curl --fail --show-error --silent --retry 12 --retry-delay 5 http://127.0.0.1:8088/healthz -H 'Host: ${{ secrets.PUBLIC_HOST }}' &&
+            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/ -H 'Host: ${{ secrets.PUBLIC_HOST }}')\" = 404 &&
+            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/control/v1/runners -H 'Host: ${{ secrets.PUBLIC_HOST }}')\" = 404 &&
+            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/v1/models -H 'Host: ${{ secrets.PUBLIC_HOST }}')\" = 401
           "

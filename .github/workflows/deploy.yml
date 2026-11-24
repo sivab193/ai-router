@@ -42,21 +42,22 @@ jobs:
       - name: Package release
         run: git archive --format=tar.gz -o "/tmp/ai-router-${GITHUB_SHA}.tar.gz" HEAD
       - name: Upload release through IAP
-        run: >-
-          gcloud compute scp
-          --project=aayvu-513001
-          --zone=us-central1-a
-          --tunnel-through-iap
-          "/tmp/ai-router-${GITHUB_SHA}.tar.gz"
-          scripts/deploy-release.sh
-          ai-router-gateway:/tmp/
+        run: |
+          cp scripts/deploy-release.sh "/tmp/deploy-release-${GITHUB_SHA}.sh"
+          gcloud compute scp \
+            --project=aayvu-513001 \
+            --zone=us-central1-a \
+            --tunnel-through-iap \
+            "/tmp/ai-router-${GITHUB_SHA}.tar.gz" \
+            "/tmp/deploy-release-${GITHUB_SHA}.sh" \
+            ai-router-gateway:/tmp/
       - name: Activate release
         run: >-
           gcloud compute ssh ai-router-gateway
           --project=aayvu-513001
           --zone=us-central1-a
           --tunnel-through-iap
-          --command="sudo bash /tmp/deploy-release.sh /tmp/ai-router-${GITHUB_SHA}.tar.gz ${GITHUB_SHA}"
+          --command="sudo bash /tmp/deploy-release-${GITHUB_SHA}.sh /tmp/ai-router-${GITHUB_SHA}.tar.gz ${GITHUB_SHA}"
       - name: Verify production
         run: |
           curl --fail --show-error --silent --retry 12 --retry-delay 5 --retry-all-errors https://ai.siv19.dev/healthz

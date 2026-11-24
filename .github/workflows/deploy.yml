@@ -59,8 +59,14 @@ jobs:
           --tunnel-through-iap
           --command="sudo bash /tmp/deploy-release-${GITHUB_SHA}.sh /tmp/ai-router-${GITHUB_SHA}.tar.gz ${GITHUB_SHA}"
       - name: Verify production
-        run: |
-          curl --fail --show-error --silent --retry 12 --retry-delay 5 --retry-all-errors https://ai.siv19.dev/healthz
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' https://ai.siv19.dev/)" = 404
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' https://ai.siv19.dev/control/v1/runners)" = 404
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' https://ai.siv19.dev/v1/models)" = 401
+        run: >-
+          gcloud compute ssh ai-router-gateway
+          --project=aayvu-513001
+          --zone=us-central1-a
+          --tunnel-through-iap
+          --command="
+            curl --fail --show-error --silent --retry 12 --retry-delay 5 http://127.0.0.1:8088/healthz -H 'Host: ai.siv19.dev' &&
+            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/ -H 'Host: ai.siv19.dev')\" = 404 &&
+            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/control/v1/runners -H 'Host: ai.siv19.dev')\" = 404 &&
+            test \"\$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/v1/models -H 'Host: ai.siv19.dev')\" = 401
+          "
